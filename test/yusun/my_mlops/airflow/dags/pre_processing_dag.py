@@ -7,6 +7,26 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 import boto3
 import psycopg2
+import magic
+
+def get_file_type_by_magic(filepath):
+    mime = magic.Magic(mime=True)
+    mime_type = mime.from_file(filepath)
+
+    if mime_type.startswith('image/'):
+        return 'image'
+    elif mime_type.startswith('video/'):
+        return 'video'
+    elif mime_type.startswith('audio/'):
+        return 'audio'
+    elif mime_type == 'text/plain':
+        return 'text'
+    elif mime_type in ['application/vnd.ms-excel',
+                       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']:
+        return 'excel'
+    else:
+        return f'unknown ({mime_type})'
+
 
 def load_secret(name):
     path = f"/run/secrets/{name}"
@@ -21,16 +41,22 @@ MINIO_SECRET_KEY = load_secret("minio_root_password")
 POSTGRES_USER = load_secret("postgresql_user")
 POSTGRES_PASSWORD = load_secret("postgresql_password")
 
-def process_video(video_file):
-    final_text = (
-        f"test_metadata\n"
-        f"test_audio\n"
-        f"test_display"
-    )
+def process_data(file):
+    file_type = get_file_type_by_magic(file)
+    if file_type == 'image':
+        final_text = ("test_text_img")
+    elif file_type == 'video':
+        final_text = ("test_text_video")
+    elif file_type == 'audio':
+        final_text = ("test_text_audio")
+    elif file_type == 'text':
+        final_text = ("test_text_text")
+    elif file_type == 'excel':
+        final_text = ("test_text_excel")
     return final_text
 
 with DAG(
-    dag_id='video_processing_dag',
+    dag_id='pre_processing_dag',
     start_date=datetime(2025, 1, 1),
     schedule_interval=None,
     catchup=False
@@ -59,7 +85,7 @@ with DAG(
             region_name='ap-northeast-2'
         )
 
-        local_folder = "/opt/airflow/videos"
+        local_folder = "/opt/airflow/files"
         os.makedirs(local_folder, exist_ok=True)
         local_path = os.path.join(local_folder, os.path.basename(object_key))
 
@@ -69,12 +95,12 @@ with DAG(
         return local_path
 
     def process_and_save(**context):
-        video_file = context['ti'].xcom_pull(task_ids='download_from_minio')
-        if not video_file:
+        file = context['ti'].xcom_pull(task_ids='download_from_minio')
+        if not file:
             print("No video file found.")
             return
 
-        final_text = process_video(video_file)
+        final_text = process_data(file)
 
         conn = psycopg2.connect(
             host='postgres',
@@ -84,15 +110,15 @@ with DAG(
         )
         cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS video_results (
+            CREATE TABLE IF NOT EXISTS file_data (
                 id SERIAL PRIMARY KEY,
                 filename TEXT,
                 result TEXT
             );
         """)
         cur.execute(
-            "INSERT INTO video_results (filename, result) VALUES (%s, %s);",
-            (os.path.basename(video_file), final_text)
+            "INSERT INTO file_data (filename, result) VALUES (%s, %s);",
+            (os.path.basename(file), final_text)
         )
         conn.commit()
         cur.close()

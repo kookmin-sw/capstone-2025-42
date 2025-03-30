@@ -1,3 +1,4 @@
 requests
 boto3
 pendulum==2.1.2
+python-magic
