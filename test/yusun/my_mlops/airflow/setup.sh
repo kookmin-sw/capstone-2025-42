@@ -39,7 +39,7 @@ airflow scheduler &
 
 echo "Waiting for DAG to be registered..."
 RETRY=30
-until airflow dags list | grep -q "video_processing_dag"; do
+until airflow dags list | grep -q "pre_processing_dag"; do
   echo "DAG not found yet... waiting"
   sleep 2
   RETRY=$((RETRY - 1))
@@ -50,7 +50,7 @@ until airflow dags list | grep -q "video_processing_dag"; do
 done
 
 echo "DAG found. Unpausing..."
-airflow dags unpause video_processing_dag || true
+airflow dags unpause pre_processing_dag || true
 
 echo "Starting webserver..."
 exec airflow webserver

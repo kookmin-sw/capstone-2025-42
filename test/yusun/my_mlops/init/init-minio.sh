@@ -5,7 +5,7 @@ MINIO_ALIAS=local
 MINIO_URL=http://minio:9000
 MINIO_ACCESS_KEY=$(cat /run/secrets/minio_root_user)
 MINIO_SECRET_KEY=$(cat /run/secrets/minio_root_password)
-BUCKET_NAME=video-bucket
+BUCKET_NAME=data-bucket
 WEBHOOK_NAME=airflow
 PROXY_ENDPOINT=http://proxy:8000/webhook
 
@@ -28,8 +28,7 @@ echo "Proxy is up!"
 
 echo "Adding webhook..."
 mc event add $MINIO_ALIAS/$BUCKET_NAME arn:minio:sqs::$WEBHOOK_NAME:webhook \
-  --event put \
-  --suffix .mp4 --quiet
+  --event put --quiet
 
 echo "MinIO webhook registration complete!"
 
