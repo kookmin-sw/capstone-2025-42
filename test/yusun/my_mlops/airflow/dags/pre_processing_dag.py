@@ -6,9 +6,11 @@ from datetime import datetime
 from airflow import DAG
 import json
 from airflow.operators.python_operator import PythonOperator
-import boto3
+from minio import Minio
 import psycopg2
 import magic
+import zipfile
+from urllib.parse import unquote_plus
 
 
 def load_secret(name):
@@ -19,17 +21,47 @@ def load_secret(name):
     else:
         raise FileNotFoundError(f"Secret {name} not found at {path}")
 
+MINIO_URL = os.getenv("MINIO_URL", "minio:9000")
 MINIO_ACCESS_KEY = load_secret("minio_root_user")
 MINIO_SECRET_KEY = load_secret("minio_root_password")
-POSTGRES_USER = load_secret("postgresql_user")
-POSTGRES_PASSWORD = load_secret("postgresql_password")
+POSTGRESQL_USER = load_secret("postgresql_user")
+POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 
+
+def is_hwp(filepath):
+    with open(filepath, "rb") as f:
+        header = f.read(8)
+        return header == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+
+def is_pdf(filepath):
+    with open(filepath, "rb") as f:
+        header = f.read(5)
+        return header == b'%PDF-'
 
 def get_file_type_by_magic(filepath):
     mime = magic.Magic(mime=True)
     mime_type = mime.from_file(filepath)
-
-    if mime_type.startswith('image/'):
+    if mime_type == "application/zip":
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zipf:
+                names = zipf.namelist()
+                if 'word/document.xml' in names:
+                    return 'text'
+                elif 'xl/workbook.xml' in names:
+                    return 'excel'
+                elif 'ppt/presentation.xml' in names:
+                    return 'text'
+        except:
+            pass
+    elif mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zipf:
+                names = zipf.namelist()
+                if 'word/document.xml' in names:
+                    return 'text'
+        except:
+            pass
+    elif mime_type.startswith('image/'):
         return 'image'
     elif mime_type.startswith('video/'):
         return 'video'
@@ -40,12 +72,17 @@ def get_file_type_by_magic(filepath):
     elif mime_type in ['application/vnd.ms-excel',
                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']:
         return 'excel'
+    elif is_hwp(filepath):
+        return 'text'
+    elif is_pdf(filepath):
+        return 'text'
     else:
         return f'unknown ({mime_type})'
 
 
 def process_data(meta, file):
     file_type = get_file_type_by_magic(file)
+    final_text = 'test_text_default'
     if file_type == 'image':
         final_text = "test_text_img"
     elif file_type == 'video':
@@ -87,26 +124,26 @@ with DAG(
         bucket_name = record['s3']['bucket']['name']
         meta_key = record['s3']['object']['key']
 
-        s3 = boto3.client(
-            's3',
-            endpoint_url='http://minio:9000',
-            aws_access_key_id=MINIO_ACCESS_KEY,
-            aws_secret_access_key=MINIO_SECRET_KEY,
-            region_name='ap-northeast-2'
+        client = Minio(
+            MINIO_URL,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=False
         )
 
         local_folder = "/opt/airflow/files/"
         os.makedirs(local_folder, exist_ok=True)
+        meta_key = unquote_plus(meta_key)
         meta_local_path = os.path.join(local_folder, os.path.basename(meta_key))
-        s3.download_file(bucket_name, meta_key, meta_local_path)
+        client.fget_object(bucket_name, meta_key, meta_local_path)
 
         with open(meta_local_path) as f:
             meta = json.load(f)
 
-        filename_list = meta['original_filename'].split('.')
+        filename_list = meta['filename'].rsplit('.', 1)
         original_file_key = f"{filename_list[0]}_{meta['uuid']}.{filename_list[-1]}"
         file_local_path = os.path.join(local_folder, os.path.basename(original_file_key))
-        s3.download_file(bucket_name, original_file_key, file_local_path)
+        client.fget_object(bucket_name, original_file_key, file_local_path)
 
         return meta_local_path, file_local_path
 
@@ -121,8 +158,8 @@ with DAG(
         conn = psycopg2.connect(
             host='postgres',
             database='airflow',
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD
+            user=POSTGRESQL_USER,
+            password=POSTGRESQL_PASSWORD
         )
         cur = conn.cursor()
         cur.execute("""
@@ -142,16 +179,17 @@ with DAG(
                 filename TEXT,
                 description TEXT,
                 location TEXT,
-                datetime TEXT
+                datetime TEXT,
+                uuid TEXT
             );
         """)
         cur.execute("""
             INSERT INTO file_meta_data (
-                filename, description, location, datetime
-            ) VALUES (%s, %s, %s, %s);
+                filename, description, location, datetime, uuid
+            ) VALUES (%s, %s, %s, %s, %s);
             """,
             (os.path.basename(file), meta_data["description"],
-             meta_data["location"], meta_data["datetime"])
+             meta_data["location"], meta_data["datetime"], meta_data["uuid"])
         )
         conn.commit()
         cur.close()
