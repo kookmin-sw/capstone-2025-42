@@ -16,27 +16,31 @@ docker-compose down -v
 
 ```
 .
+├── README.md
 ├── airflow
-│   ├── Dockerfile
-│   ├── dags
-│   │   └── video_processing_dag.py
-│   ├── requirements.txt
-│   └── setup.sh
+│   ├── Dockerfile
+│   ├── dags
+│   │   └── pre_processing_dag.py
+│   ├── requirements.txt
+│   └── setup.sh
 ├── docker-compose.yml
 ├── init
-│   ├── Dockerfile
-│   └── init-minio.sh
+│   ├── Dockerfile
+│   └── init-minio.sh
 ├── proxy
-│   ├── Dockerfile
-│   └── app.py
-└── secrets
-    ├── airflow_fernet_key
-    ├── airflow_password
-    ├── airflow_user
-    ├── minio_root_password
-    ├── minio_root_user
-    ├── postgresql_password
-    └── postgresql_user
+│   ├── Dockerfile
+│   └── app.py
+├── secrets
+│   ├── airflow_fernet_key
+│   ├── airflow_password
+│   ├── airflow_user
+│   ├── minio_root_password
+│   ├── minio_root_user
+│   ├── postgresql_password
+│   └── postgresql_user
+└── webserver
+    ├── Dockerfile
+    └── app.py
 ```
 
 ---
