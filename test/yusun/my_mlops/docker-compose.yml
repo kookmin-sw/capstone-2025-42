@@ -47,6 +47,7 @@ services:
       AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
       _AIRFLOW_WWW_USER_USERNAME_FILE: /run/secrets/airflow_user
       _AIRFLOW_WWW_USER_PASSWORD_FILE: /run/secrets/airflow_password
+      MINIO_URL: minio:9000
     ports:
       - "8080:8080"
     volumes:
@@ -98,9 +99,15 @@ services:
     environment:
       MINIO_URL: minio:9000
       BUCKET_NAME: data-bucket
+    depends_on:
+      - minio
+      - airflow
+      - postgres
     secrets:
       - minio_root_user
       - minio_root_password
+      - postgresql_user
+      - postgresql_password
 
 volumes:
   postgres_data:

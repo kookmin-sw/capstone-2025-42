@@ -1,4 +1,4 @@
 requests
-boto3
+minio
 pendulum==2.1.2
 python-magic
