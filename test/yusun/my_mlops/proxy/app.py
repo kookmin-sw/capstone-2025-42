@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 import requests
 import os
 import base64
+from urllib.parse import unquote
 
 app = FastAPI()
 
@@ -32,7 +33,7 @@ async def handle_minio_event(request: Request):
     try:
         record = payload["Records"][0]
         bucket = record["s3"]["bucket"]["name"]
-        key = record["s3"]["object"]["key"]
+        key = unquote(record["s3"]["object"]["key"])
 
         airflow_payload = {
             "conf": {

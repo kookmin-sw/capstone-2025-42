@@ -28,7 +28,9 @@ echo "Proxy is up!"
 
 echo "Adding webhook..."
 mc event add $MINIO_ALIAS/$BUCKET_NAME arn:minio:sqs::$WEBHOOK_NAME:webhook \
-  --event put --quiet
+  --event put \
+  --prefix "meta/" \
+  --suffix ".json" --quiet
 
 echo "MinIO webhook registration complete!"
 

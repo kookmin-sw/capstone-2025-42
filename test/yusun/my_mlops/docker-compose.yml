@@ -90,6 +90,18 @@ services:
       - minio_root_user
       - minio_root_password
 
+  webserver:
+    build:
+      context: ./webserver
+    ports:
+      - "8792:8000"
+    environment:
+      MINIO_URL: minio:9000
+      BUCKET_NAME: data-bucket
+    secrets:
+      - minio_root_user
+      - minio_root_password
+
 volumes:
   postgres_data:
   minio_data:
