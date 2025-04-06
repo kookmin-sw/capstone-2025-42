@@ -99,10 +99,14 @@ services:
     environment:
       MINIO_URL: minio:9000
       BUCKET_NAME: data-bucket
+      FLASK_APP: app
+      FLASK_ENV: development
     depends_on:
       - minio
       - airflow
       - postgres
+    volumes:
+      - ./webserver:/app
     secrets:
       - minio_root_user
       - minio_root_password

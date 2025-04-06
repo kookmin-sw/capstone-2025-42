@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>데이터 업로드 & 다운로드</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+  <div class="max-w-5xl mx-auto bg-white p-8 rounded-2xl shadow-xl space-y-12">
+
+    <!-- 업로드 영역 -->
+    <section>
+      <h2 class="text-2xl font-bold text-blue-700 mb-4">📄 데이터 업로드</h2>
+      <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
+        <input type="file" name="file" id="fileInput" class="w-full border px-4 py-2 rounded" multiple required>
+        <input type="text" id="titleInput" class="w-full border px-4 py-2 rounded" placeholder="공통 타이틀 (선택)">
+        <textarea id="descInput" name="description" rows="3" class="w-full border px-4 py-2 rounded" placeholder="공통 설명 (선택)"></textarea>
+        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">업로드하기</button>
+      </form>
+
+      <div id="uploadMessage" class="mt-4 text-green-700 font-medium"></div>
+
+      <!-- 검색, 정렬, 필터 메뉴 -->
+      <form id="searchForm" class="flex flex-nowrap gap-x-2 items-center w-full overflow-x-auto">
+        <input type="text" name="word" id="searchInput" placeholder="파일명 또는 제목으로 검색..." 
+           class="border px-3 py-2 rounded flex-grow min-w-0">
+
+        <select id="sortSelect" class="border px-3 py-2 rounded">
+          <option value="name">파일명순</option>
+          <option value="recent">최신순</option>
+        </select>
+
+        <select id="dateFilter" class="border px-3 py-2 rounded">
+          <option value="all">모든 날짜</option>
+          <option value="today">오늘</option>
+          <option value="week">이번 주</option>
+        </select>
+
+        <select id="typeFilter" class="border px-3 py-2 rounded">
+          <option value="all">전체</option>
+          <option value="xlsx">.xlsx</option>
+          <option value="hwp">.hwp</option>
+          <option value="jpg">.jpg</option>
+        </select>
+
+        <button type="submit"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow whitespace-nowrap">
+          🔍 검색
+        </button>
+      </form>
+
+      <!-- 업로드된 파일 목록 -->
+      <div id="uploadList" class="space-y-4"></div>
+      <div id="pagination" class="mt-6 flex justify-center gap-2"></div>
+    </section>
+
+    <section>
+      <h2 class="text-2xl font-bold text-green-700 mb-4">📁 기존 데이터 다운로드</h2>
+      <div id="downloadList" class="space-y-4"></div>
+    </section>
+  </div>
+
+  <script>
+    const uploadForm = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const titleInput = document.getElementById('titleInput');
+    const descInput = document.getElementById('descInput');
+    const uploadList = document.getElementById('uploadList');
+    const downloadList = document.getElementById('downloadList');
+    const searchForm = document.getElementById('searchForm');
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const dateFilter = document.getElementById('dateFilter');
+    const typeFilter = document.getElementById('typeFilter');
+    const uploadMessage = document.getElementById('uploadMessage');
+    const pagination = document.getElementById('pagination');
+
+    let uploadedItems = [];
+    let currentPage = 1;
+    const itemsPerPage = 6;
+
+    uploadForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      const files = Array.from(fileInput.files);
+      const title = titleInput.value;
+      const desc = descInput.value;
+      const formData = new FormData();
+
+      files.forEach(file => {
+        formData.append("file", file);
+      });
+      formData.append("title", title);
+      formData.append("description", desc);
+
+      fetch("/upload", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        uploadMessage.textContent = `${data.files.length}개의 파일이 업로드되었습니다.`;
+        setTimeout(() => { uploadMessage.textContent = ''; }, 4000);
+        uploadForm.reset();
+      });
+    });
+
+    searchForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      currentPage = 1;
+      fetchAndRenderFiles();
+    });
+
+    function fetchAndRenderFiles() {
+      fetch(`/search?word=${encodeURIComponent(searchInput.value)}`)
+        .then(res => res.json())
+        .then(data => {
+          uploadedItems = data.results.map(item => ({
+            file: { name: item.filename },
+            title: item.filename,
+            desc: '',
+            time: Date.now(),
+            url: item.download_url
+          }));
+          renderUploads();
+          renderDownloadList();
+        });
+    }
+
+    function renderUploads() {
+      const keyword = searchInput.value.toLowerCase();
+      const sortBy = sortSelect.value;
+      const dateValue = dateFilter.value;
+      const typeValue = typeFilter.value;
+
+      let filtered = [...uploadedItems];
+
+      filtered = filtered.filter(item =>
+        item.file.name.toLowerCase().includes(keyword) ||
+        item.title.toLowerCase().includes(keyword)
+      );
+
+      const now = new Date();
+      filtered = filtered.filter(item => {
+        const uploadTime = new Date(item.time);
+        if (dateValue === "today") {
+          return uploadTime.toDateString() === now.toDateString();
+        } else if (dateValue === "week") {
+          const diff = now - uploadTime;
+          return diff <= 7 * 24 * 60 * 60 * 1000;
+        }
+        return true;
+      });
+
+      if (typeValue !== "all") {
+        filtered = filtered.filter(item =>
+          item.file.name.toLowerCase().endsWith(`.${typeValue}`)
+        );
+      }
+
+      if (sortBy === 'name') {
+        filtered.sort((a, b) => a.file.name.localeCompare(b.file.name));
+      } else if (sortBy === 'recent') {
+        filtered.sort((a, b) => b.time - a.time);
+      }
+
+      const totalPages = Math.ceil(filtered.length / itemsPerPage);
+      if (currentPage > totalPages) currentPage = totalPages || 1;
+
+      const start = (currentPage - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      const paginatedItems = filtered.slice(start, end);
+
+      uploadList.innerHTML = '';
+      paginatedItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "border p-4 rounded shadow bg-white";
+        card.innerHTML = `
+          <p class="font-semibold text-gray-800">${item.title}</p>
+          <p class="text-sm text-gray-600">${item.desc}</p>
+          <p class="text-xs text-gray-400">${item.file.name}</p>
+          <a href="${item.url}" download="${item.file.name}" class="mt-2 inline-block bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
+            ⬇️ 다운로드
+          </a>
+        `;
+        uploadList.appendChild(card);
+      });
+
+      pagination.innerHTML = '';
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement('button');
+        btn.textContent = i;
+        btn.className = `px-3 py-1 rounded ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200'} hover:bg-blue-400`;
+        btn.addEventListener('click', () => {
+          currentPage = i;
+          renderUploads();
+        });
+        pagination.appendChild(btn);
+      }
+    }
+
+    function renderDownloadList() {
+      downloadList.innerHTML = '';
+      uploadedItems.forEach(item => {
+        const entry = document.createElement('div');
+        entry.className = "border p-4 rounded shadow bg-white flex items-center justify-between";
+        entry.innerHTML = `
+          <span class="font-medium text-gray-800">${item.file.name}</span>
+          <a href="${item.url}" download class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
+            ⬇️ 다운로드
+          </a>
+        `;
+        downloadList.appendChild(entry);
+      });
+    }
+
+    sortSelect.addEventListener('change', () => { currentPage = 1; renderUploads(); });
+    dateFilter.addEventListener('change', () => { currentPage = 1; renderUploads(); });
+    typeFilter.addEventListener('change', () => { currentPage = 1; renderUploads(); });
+  </script>
+</body>
+</html>
