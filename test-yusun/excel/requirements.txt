@@ -1,0 +1,8 @@
+Flask
+pandas
+openpyxl
+fuzzywuzzy
+python-Levenshtein
+sentence-transformers
+torch
+

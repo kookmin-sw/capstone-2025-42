@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify, render_template_string, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from minio import Minio
 import psycopg2
 from uuid import uuid4
 import json
 import os
 import time
+from datetime import datetime
 
 
 app = Flask(__name__)
@@ -48,105 +49,58 @@ else:
     raise Exception("PostgreSQL 연결 실패: DB가 안 떠 있음")
 
 
-EXAMPLE_HTML = """
-<!doctype html>
-<html>
-<head>
-  <title>파일 업로드</title>
-  <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
-    input, textarea { width: 100%; padding: 10px; margin: 10px 0; }
-    button { padding: 10px 20px; }
-    .result { margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <h2>파일 + 설명 업로드</h2>
-  <form method="POST" action="/upload" enctype="multipart/form-data">
-    <label>파일 선택:</label>
-    <input type="file" name="file" required><br>
-    <label>설명:</label>
-    <textarea name="description" rows="4" placeholder="이 파일에 대한 설명을 입력하세요" required></textarea><br>
-    <button type="submit">업로드</button>
-  </form>
-
-  <h2>파일 검색</h2>
-  <form method="GET" action="/search">
-    <input type="text" name="word" placeholder="파일을 나타내는 단어" required>
-    <button type="submit">검색</button>
-  </form>
-
-  {% if results is not none %}
-    {% if results %}
-    <table>
-      <thead><tr><th>파일명</th><th>다운로드</th></tr></thead>
-      <tbody>
-        {% for r in results %}
-        <tr>
-          <td>{{ r.filename }}</td>
-          <td><a href="/download?filename={{ r.realpath }}&origin_name={{ r.filename }}">다운로드</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <p>검색 결과가 없습니다.</p>
-    {% endif %}
-  {% endif %}
-</body>
-</html>
-"""
-
 @app.route("/", methods=["GET"])
 def index():
-    return render_template_string(EXAMPLE_HTML, results=None)
+    return render_template('index.html')
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    file = request.files.get('file')
+    uploaded_files = request.files.getlist('file')
     description = request.form.get('description', '')
+    title = request.form.get("title", "(제목 없음)")
+    
+    saved_files = []
 
-    if not file:
-        return jsonify({"error": "파일이 없습니다."}), 400
+    for file in uploaded_files:
+        if file.filename:
+            filename = file.filename
+            ext = os.path.splitext(filename)[1]
+            base_name = os.path.splitext(filename)[0]
+            unique_id = str(uuid4())
 
-    filename = file.filename
-    ext = os.path.splitext(filename)[1]
-    base_name = os.path.splitext(filename)[0]
+            file_key = f"{base_name}_{unique_id}{ext}"
+            json_key = f"meta/{base_name}_{unique_id}.json"
 
-    unique_id = str(uuid4())
+            file_path = f"/tmp/{file_key}"
+            json_path = f"/tmp/{json_key}"
+            file.save(file_path)
 
-    file_key = f"{base_name}_{unique_id}{ext}"
-    json_key = f"meta/{base_name}_{unique_id}.json"
+            json_data = {
+                "description": description,
+                "filename": filename,
+                "uuid": unique_id
+            }
 
-    file_path = f"/tmp/{file_key}"
-    json_path = f"/tmp/{json_key}"
-    file.save(file_path)
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+            with open(json_path, "w") as f:
+                json.dump(json_data, f)
 
-    json_data = {
-        "description": description,
-        "filename": filename,
-        "uuid": unique_id
-    }
+            minio_client.fput_object(BUCKET_NAME, file_key, file_path)
+            minio_client.fput_object(BUCKET_NAME, json_key, json_path)
 
-    os.makedirs(os.path.dirname(json_path), exist_ok=True)
-    with open(json_path, "w") as f:
-        json.dump(json_data, f)
+            os.remove(file_path)
+            os.remove(json_path)
 
-    minio_client.fput_object(BUCKET_NAME, file_key, file_path)
-    minio_client.fput_object(BUCKET_NAME, json_key, json_path)
+            saved_files.append({
+                "filename": filename,
+                "title": title,
+                "description": description,
+                "uuid": unique_id,
+                "time": datetime.now().isoformat()
+            })
 
-    os.remove(file_path)
-    os.remove(json_path)
-
-    return f"""
-        <p>업로드 성공!</p>
-        <ul>
-          <li><strong>파일:</strong> {file_key}</li>
-          <li><strong>설명 JSON:</strong> {json_key}</li>
-        </ul>
-        <a href="/">다시 업로드</a>
-    """
+    return jsonify({"status": "success", "files": saved_files})
 
 @app.route("/search", methods=["GET"])
 def search():
@@ -165,13 +119,16 @@ def search():
     where_data = " OR ".join(like_clauses_data)
     where_meta = " OR ".join(like_clauses_meta)
 
+    where_data_clause = f"WHERE {where_data}" if where_data else ""
+    where_meta_clause = f"WHERE {where_meta}" if where_meta else ""
+
     query = f"""
     WITH unioned AS (
         SELECT filename, NULL AS uuid FROM file_data
-        WHERE {where_data}
+        {where_data_clause}
         UNION ALL
         SELECT filename, uuid FROM file_meta_data
-        WHERE {where_meta}
+        {where_meta_clause}
     )
     SELECT filename, MIN(uuid) AS uuid
     FROM unioned
@@ -185,9 +142,13 @@ def search():
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
-        results = [{"filename": row[0].replace(f"_{row[1]}", ""), "realpath": row[0]} for row in rows]
+        results = [{
+            "filename": row[0].replace(f"_{row[1]}", ""),
+            "realpath": row[0],
+            "download_url": f"/download?filename={row[0]}&origin_name={row[0].replace(f'_{row[1]}', '')}"
+        } for row in rows]
 
-    return render_template_string(EXAMPLE_HTML, results=results)
+    return jsonify({"results": results})
 
 
 @app.route("/download", methods=["GET"])
