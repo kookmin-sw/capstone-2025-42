@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, after_this_request
 from minio import Minio
 import psycopg2
 from uuid import uuid4
@@ -6,6 +6,7 @@ import json
 import os
 import time
 from datetime import datetime
+from urllib.parse import unquote
 
 
 app = Flask(__name__)
@@ -144,8 +145,7 @@ def search():
         rows = cur.fetchall()
         results = [{
             "filename": row[0].replace(f"_{row[1]}", ""),
-            "realpath": row[0],
-            "download_url": f"/download?filename={row[0]}&origin_name={row[0].replace(f'_{row[1]}', '')}"
+            "realpath": row[0]
         } for row in rows]
 
     return jsonify({"results": results})
@@ -160,7 +160,8 @@ def download():
         return {"error": "filename query param required"}, 400
 
     with conn.cursor() as cur:
-        cur.execute("SELECT filename FROM file_data WHERE filename = %s", (filename,))
+        print(filename, flush=True)
+        cur.execute("SELECT filename FROM file_data WHERE filename = %s", (unquote(filename),))
         row = cur.fetchone()
         if not row:
             return {"error": "File not found"}, 404
@@ -168,6 +169,15 @@ def download():
 
     local_path = f"/tmp/{os.path.basename(filename)}"
     minio_client.fget_object(BUCKET_NAME, filename, local_path)
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(local_path)
+            print(f"Deleted file: {local_path}", flush=True)
+        except Exception as e:
+            print(f"Error deleting file: {e}", flush=True)
+        return response
 
     return send_file(local_path, as_attachment=True, download_name=origin_name)
 

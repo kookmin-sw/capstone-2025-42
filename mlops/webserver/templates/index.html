@@ -13,7 +13,6 @@
       <h2 class="text-2xl font-bold text-blue-700 mb-4">📄 데이터 업로드</h2>
       <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
         <input type="file" name="file" id="fileInput" class="w-full border px-4 py-2 rounded" multiple required>
-        <input type="text" id="titleInput" class="w-full border px-4 py-2 rounded" placeholder="공통 타이틀 (선택)">
         <textarea id="descInput" name="description" rows="3" class="w-full border px-4 py-2 rounded" placeholder="공통 설명 (선택)"></textarea>
         <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">업로드하기</button>
       </form>
@@ -48,12 +47,7 @@
           🔍 검색
         </button>
       </form>
-
-      <!-- 업로드된 파일 목록 -->
-      <div id="uploadList" class="space-y-4"></div>
-      <div id="pagination" class="mt-6 flex justify-center gap-2"></div>
     </section>
-
     <section>
       <h2 class="text-2xl font-bold text-green-700 mb-4">📁 기존 데이터 다운로드</h2>
       <div id="downloadList" class="space-y-4"></div>
@@ -63,9 +57,7 @@
   <script>
     const uploadForm = document.getElementById('uploadForm');
     const fileInput = document.getElementById('fileInput');
-    const titleInput = document.getElementById('titleInput');
     const descInput = document.getElementById('descInput');
-    const uploadList = document.getElementById('uploadList');
     const downloadList = document.getElementById('downloadList');
     const searchForm = document.getElementById('searchForm');
     const searchInput = document.getElementById('searchInput');
@@ -83,14 +75,12 @@
       e.preventDefault();
 
       const files = Array.from(fileInput.files);
-      const title = titleInput.value;
       const desc = descInput.value;
       const formData = new FormData();
 
       files.forEach(file => {
         formData.append("file", file);
       });
-      formData.append("title", title);
       formData.append("description", desc);
 
       fetch("/upload", {
@@ -116,97 +106,24 @@
         .then(res => res.json())
         .then(data => {
           uploadedItems = data.results.map(item => ({
-            file: { name: item.filename },
             title: item.filename,
+	    path: item.realpath,
             desc: '',
             time: Date.now(),
-            url: item.download_url
           }));
-          renderUploads();
           renderDownloadList();
         });
-    }
-
-    function renderUploads() {
-      const keyword = searchInput.value.toLowerCase();
-      const sortBy = sortSelect.value;
-      const dateValue = dateFilter.value;
-      const typeValue = typeFilter.value;
-
-      let filtered = [...uploadedItems];
-
-      filtered = filtered.filter(item =>
-        item.file.name.toLowerCase().includes(keyword) ||
-        item.title.toLowerCase().includes(keyword)
-      );
-
-      const now = new Date();
-      filtered = filtered.filter(item => {
-        const uploadTime = new Date(item.time);
-        if (dateValue === "today") {
-          return uploadTime.toDateString() === now.toDateString();
-        } else if (dateValue === "week") {
-          const diff = now - uploadTime;
-          return diff <= 7 * 24 * 60 * 60 * 1000;
-        }
-        return true;
-      });
-
-      if (typeValue !== "all") {
-        filtered = filtered.filter(item =>
-          item.file.name.toLowerCase().endsWith(`.${typeValue}`)
-        );
-      }
-
-      if (sortBy === 'name') {
-        filtered.sort((a, b) => a.file.name.localeCompare(b.file.name));
-      } else if (sortBy === 'recent') {
-        filtered.sort((a, b) => b.time - a.time);
-      }
-
-      const totalPages = Math.ceil(filtered.length / itemsPerPage);
-      if (currentPage > totalPages) currentPage = totalPages || 1;
-
-      const start = (currentPage - 1) * itemsPerPage;
-      const end = start + itemsPerPage;
-      const paginatedItems = filtered.slice(start, end);
-
-      uploadList.innerHTML = '';
-      paginatedItems.forEach(item => {
-        const card = document.createElement('div');
-        card.className = "border p-4 rounded shadow bg-white";
-        card.innerHTML = `
-          <p class="font-semibold text-gray-800">${item.title}</p>
-          <p class="text-sm text-gray-600">${item.desc}</p>
-          <p class="text-xs text-gray-400">${item.file.name}</p>
-          <a href="${item.url}" download="${item.file.name}" class="mt-2 inline-block bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
-            ⬇️ 다운로드
-          </a>
-        `;
-        uploadList.appendChild(card);
-      });
-
-      pagination.innerHTML = '';
-      for (let i = 1; i <= totalPages; i++) {
-        const btn = document.createElement('button');
-        btn.textContent = i;
-        btn.className = `px-3 py-1 rounded ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200'} hover:bg-blue-400`;
-        btn.addEventListener('click', () => {
-          currentPage = i;
-          renderUploads();
-        });
-        pagination.appendChild(btn);
-      }
     }
 
     function renderDownloadList() {
       downloadList.innerHTML = '';
       uploadedItems.forEach(item => {
         const entry = document.createElement('div');
+        const encodedUrl = `/download?filename=${encodeURIComponent(item.path)}&origin_name=${encodeURIComponent(item.title)}`;
         entry.className = "border p-4 rounded shadow bg-white flex items-center justify-between";
         entry.innerHTML = `
-          <span class="font-medium text-gray-800">${item.file.name}</span>
-          <a href="${item.url}" download class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
+          <span class="font-medium text-gray-800">${item.title}</span>
+          <a href="${encodedUrl}" download class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
             ⬇️ 다운로드
           </a>
         `;
