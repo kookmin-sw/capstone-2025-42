@@ -7,9 +7,9 @@ from io import BytesIO
 from collections import defaultdict
 from sentence_transformers import SentenceTransformer, util
 
-semantic_model = SentenceTransformer('intfloat/multilingual-e5-base')
+semantic_model = SentenceTransformer("intfloat/multilingual-e5-base")
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "SOME_SECRET_KEY"
+app.config["SECRET_KEY"] = "SOME_SECRET_KEY"
 
 # ------------------------------------------------------------------------------
 # 전역 임시 저장소 (실무에선 DB나 세션, Redis 등에 저장 권장)
@@ -131,7 +131,8 @@ def unify_columns(all_dfs, similarity_threshold=90):
     """
     from itertools import combinations
     from collections import defaultdict
-#
+
+    #
     # 1. 모든 컬럼 수집
     col_set = set()
     for df in all_dfs:
@@ -149,7 +150,10 @@ def unify_columns(all_dfs, similarity_threshold=90):
     groups = []
 
     def avg_similarity_to_group(col, group):
-        sims = [pair_similarities.get(frozenset([col, g]), combined_similarity(col, g)) for g in group]
+        sims = [
+            pair_similarities.get(frozenset([col, g]), combined_similarity(col, g))
+            for g in group
+        ]
         return sum(sims) / len(sims)
 
     for col in col_list:
@@ -172,7 +176,9 @@ def unify_columns(all_dfs, similarity_threshold=90):
             max_score = -1
             rep = group[0]
             for cand in group:
-                score = sum(combined_similarity(cand, other) for other in group if cand != other)
+                score = sum(
+                    combined_similarity(cand, other) for other in group if cand != other
+                )
                 if score > max_score:
                     max_score = score
                     rep = cand
@@ -197,12 +203,9 @@ def find_unique_column_candidates_verbose(df, unique_ratio_threshold=40):
         unique = values.nunique()
         ratio = (unique / total) * 100
         if ratio >= unique_ratio_threshold:
-            candidates.append({
-                "column": col,
-                "unique": unique,
-                "total": total,
-                "ratio": ratio
-            })
+            candidates.append(
+                {"column": col, "unique": unique, "total": total, "ratio": ratio}
+            )
     return candidates
 
 
@@ -218,7 +221,7 @@ def fuzzy_merge_values(values, threshold=80):
     filtered = [
         str(v).strip()
         for v in values
-        if pd.notna(v) and str(v).strip() != '' and str(v).lower() != 'nan'
+        if pd.notna(v) and str(v).strip() != "" and str(v).lower() != "nan"
     ]
 
     clusters = []
@@ -284,7 +287,9 @@ def unify_same_named_columns(df, use_fuzzy=True, value_threshold=80):
                     filtered = [
                         str(x).strip()
                         for x in row_vals
-                        if pd.notna(x) and str(x).strip() != '' and str(x).lower() != 'nan'
+                        if pd.notna(x)
+                        and str(x).strip() != ""
+                        and str(x).lower() != "nan"
                     ]
                     filtered = list(set(filtered))
                     merged_str = ",".join(filtered) if filtered else ""
@@ -311,7 +316,7 @@ def fuzzy_cluster_key_and_merge(df, key_col, key_threshold=90, value_threshold=8
     key_clusters = []
     for k in original_keys:
         placed = False
-        if pd.isna(k) or str(k).strip() == '' or str(k).lower() == 'nan':
+        if pd.isna(k) or str(k).strip() == "" or str(k).lower() == "nan":
             # NaN/빈키는 자기 자신으로 (별도 클러스터)
             key_clusters.append([k])
             continue
@@ -361,16 +366,17 @@ def fuzzy_cluster_key_and_merge(df, key_col, key_threshold=90, value_threshold=8
 # ===============================
 # 7) Flask 라우트
 # ===============================
-@app.route('/')
+@app.route("/")
 def index():
     return render_template_string(index_template)
 
-@app.route('/upload', methods=['POST'])
+
+@app.route("/upload", methods=["POST"])
 def upload_files():
     # 1) 폼 파라미터
-    col_sim_threshold = int(request.form.get('column_similarity_threshold', 80))
-    key_sim_threshold = int(request.form.get('key_similarity_threshold', 80))
-    val_sim_threshold = int(request.form.get('value_similarity_threshold', 80))
+    col_sim_threshold = int(request.form.get("column_similarity_threshold", 80))
+    key_sim_threshold = int(request.form.get("key_similarity_threshold", 80))
+    val_sim_threshold = int(request.form.get("value_similarity_threshold", 80))
 
     # 2) 파일 업로드
     uploaded_files = request.files.getlist("files")
@@ -379,15 +385,15 @@ def upload_files():
 
     dfs = []
     for idx, file in enumerate(uploaded_files):
-        if file.filename == '':
+        if file.filename == "":
             continue
-        df = pd.read_excel(file, engine='openpyxl')
+        df = pd.read_excel(file, engine="openpyxl")
 
         # 파일마다 orientation 설정 가져오기
         orientation_key = f"orientation-{idx}"
         orientation = request.form.get(orientation_key, "vertical")
 
-        if orientation == 'horizontal':
+        if orientation == "horizontal":
             df = df.transpose()
             df.columns = df.iloc[0]
             df = df.drop(df.index[0])
@@ -429,20 +435,21 @@ def upload_files():
     temp_storage[session_id] = {
         "df": combined_df,
         "key_threshold": key_sim_threshold,
-        "value_threshold": val_sim_threshold
+        "value_threshold": val_sim_threshold,
     }
 
     return render_template_string(
         choose_key_template,
         session_id=session_id,
         unique_candidates=unique_candidates,
-        message=message
+        message=message,
     )
 
-@app.route('/select_key', methods=['POST'])
+
+@app.route("/select_key", methods=["POST"])
 def select_key():
-    session_id = request.form.get('session_id')
-    key_col = request.form.get('key_col')
+    session_id = request.form.get("session_id")
+    key_col = request.form.get("key_col")
 
     if not session_id or session_id not in temp_storage:
         return "세션이 만료되었거나 잘못되었습니다. 다시 업로드해주세요."
@@ -460,13 +467,13 @@ def select_key():
         combined_df,
         key_col=key_col,
         key_threshold=key_threshold,
-        value_threshold=value_threshold
+        value_threshold=value_threshold,
     )
 
     # 결과를 엑셀 다운로드
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        final_df.to_excel(writer, index=False, sheet_name='MergedData')
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        final_df.to_excel(writer, index=False, sheet_name="MergedData")
     output.seek(0)
 
     # 임시 데이터 삭제
@@ -476,15 +483,16 @@ def select_key():
         output,
         as_attachment=True,
         download_name="merged_result_with_fuzzy_key.xlsx",
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-@app.route('/download_result', methods=['GET'])
+
+@app.route("/download_result", methods=["GET"])
 def download_result():
     """
     유니크 컬럼이 전혀 없어서 키를 못 고르는 경우 등 -> 키 없이 그냥 다운로드
     """
-    session_id = request.args.get('session_id')
+    session_id = request.args.get("session_id")
     if not session_id or session_id not in temp_storage:
         return "세션이 만료되었거나 잘못되었습니다."
 
@@ -492,8 +500,8 @@ def download_result():
     combined_df = store["df"]
 
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        combined_df.to_excel(writer, index=False, sheet_name='MergedData')
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        combined_df.to_excel(writer, index=False, sheet_name="MergedData")
     output.seek(0)
 
     # 임시 데이터 삭제
@@ -503,12 +511,12 @@ def download_result():
         output,
         as_attachment=True,
         download_name="merged_result_no_key.xlsx",
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
 
 # ===============================
 # 실행
 # ===============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-

@@ -1,4 +1,11 @@
-from flask import Flask, request, jsonify, send_file, render_template, after_this_request
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_file,
+    render_template,
+    after_this_request,
+)
 from minio import Minio
 import psycopg2
 from uuid import uuid4
@@ -19,19 +26,17 @@ def load_secret(name, default=""):
             return f.read().strip()
     return os.getenv(name.upper(), default)
 
+
 MINIO_USER = load_secret("minio_root_user")
 MINIO_PASSWORD = load_secret("minio_root_password")
 MINIO_URL = os.getenv("MINIO_URL", "minio:9000")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "data-bucket")
 minio_client = Minio(
-    MINIO_URL,
-    access_key=MINIO_USER,
-    secret_key=MINIO_PASSWORD,
-    secure=False
+    MINIO_URL, access_key=MINIO_USER, secret_key=MINIO_PASSWORD, secure=False
 )
 
-POSTGRESQL_USER=load_secret("postgresql_user")
-POSTGRESQL_PASSWORD=load_secret("postgresql_password")
+POSTGRESQL_USER = load_secret("postgresql_user")
+POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 SLEEP_SECONDS = 2
 for i in range(60):
     try:
@@ -39,7 +44,7 @@ for i in range(60):
             host="postgres",
             database="airflow",
             user=POSTGRESQL_USER,
-            password=POSTGRESQL_PASSWORD
+            password=POSTGRESQL_PASSWORD,
         )
         print("PostgreSQL 연결 성공")
         break
@@ -52,15 +57,15 @@ else:
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    uploaded_files = request.files.getlist('file')
-    description = request.form.get('description', '')
+    uploaded_files = request.files.getlist("file")
+    description = request.form.get("description", "")
     title = request.form.get("title", "(제목 없음)")
-    
+
     saved_files = []
 
     for file in uploaded_files:
@@ -80,7 +85,7 @@ def upload():
             json_data = {
                 "description": description,
                 "filename": filename,
-                "uuid": unique_id
+                "uuid": unique_id,
             }
 
             os.makedirs(os.path.dirname(json_path), exist_ok=True)
@@ -93,15 +98,18 @@ def upload():
             os.remove(file_path)
             os.remove(json_path)
 
-            saved_files.append({
-                "filename": filename,
-                "title": title,
-                "description": description,
-                "uuid": unique_id,
-                "time": datetime.now().isoformat()
-            })
+            saved_files.append(
+                {
+                    "filename": filename,
+                    "title": title,
+                    "description": description,
+                    "uuid": unique_id,
+                    "time": datetime.now().isoformat(),
+                }
+            )
 
     return jsonify({"status": "success", "files": saved_files})
+
 
 @app.route("/search", methods=["GET"])
 def search():
@@ -143,10 +151,10 @@ def search():
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
-        results = [{
-            "filename": row[0].replace(f"_{row[1]}", ""),
-            "realpath": row[0]
-        } for row in rows]
+        results = [
+            {"filename": row[0].replace(f"_{row[1]}", ""), "realpath": row[0]}
+            for row in rows
+        ]
 
     return jsonify({"results": results})
 
@@ -161,7 +169,9 @@ def download():
 
     with conn.cursor() as cur:
         print(filename, flush=True)
-        cur.execute("SELECT filename FROM file_data WHERE filename = %s", (unquote(filename),))
+        cur.execute(
+            "SELECT filename FROM file_data WHERE filename = %s", (unquote(filename),)
+        )
         row = cur.fetchone()
         if not row:
             return {"error": "File not found"}, 404
@@ -182,6 +192,5 @@ def download():
     return send_file(local_path, as_attachment=True, download_name=origin_name)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
-

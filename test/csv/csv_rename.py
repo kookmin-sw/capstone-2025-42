@@ -19,9 +19,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 #    (json 파일이 없거나 비어있을 경우 빈 딕셔너리로 시작)
 # -----------------------------
 if os.path.exists(HEADERS_FILE):
-    with open(HEADERS_FILE, 'r', encoding='utf-8') as f:
+    with open(HEADERS_FILE, "r", encoding="utf-8") as f:
         try:
-            standard_headers = json.load(f) # 예: {"인구조사": ["연령별", "남", "여"], ...}
+            standard_headers = json.load(
+                f
+            )  # 예: {"인구조사": ["연령별", "남", "여"], ...}
         except json.JSONDecodeError:
             standard_headers = {}
 else:
@@ -56,7 +58,7 @@ def process_csv_file(filepath):
     try:
         df_raw = pd.read_csv(filepath, header=None, low_memory=False)
     except UnicodeDecodeError:
-        df_raw = pd.read_csv(filepath, header=None, encoding='cp949', low_memory=False)
+        df_raw = pd.read_csv(filepath, header=None, encoding="cp949", low_memory=False)
 
     # ---------------------------------
     # 헤더 판별: headers.json에 저장된 예상 헤더와 비교하여 전치 여부 결정
@@ -117,7 +119,7 @@ for file in os.listdir(SOURCE_DIR):
 # -----------------------------
 # 4) headers.json 업데이트 (새로운 헤더 정보 저장)
 # -----------------------------
-with open(HEADERS_FILE, 'w', encoding='utf-8') as f:
+with open(HEADERS_FILE, "w", encoding="utf-8") as f:
     json.dump(standard_headers, f, ensure_ascii=False, indent=4)
 
 
