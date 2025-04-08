@@ -8,6 +8,7 @@ app = FastAPI()
 AIRFLOW_URL = os.getenv("AIRFLOW_URL", "http://airflow:8080")
 DAG_ID = os.getenv("DAG_ID", "pre_processing_dag")
 
+
 def load_secret(name, default=""):
     path = f"/run/secrets/{name}"
     if os.path.exists(path):
@@ -15,14 +16,14 @@ def load_secret(name, default=""):
             return f.read().strip()
     return os.getenv(name.upper(), default)
 
+
 AIRFLOW_USER = load_secret("airflow_user")
 AIRFLOW_PASSWORD = load_secret("airflow_password")
 AUTH_TOKEN = base64.b64encode(f"{AIRFLOW_USER}:{AIRFLOW_PASSWORD}".encode()).decode()
 
 AIRFLOW_API_URL = f"{AIRFLOW_URL}/api/v1/dags/{DAG_ID}/dagRuns"
-AUTH_HEADER = {
-    "Authorization": f"Basic {AUTH_TOKEN}"
-}
+AUTH_HEADER = {"Authorization": f"Basic {AUTH_TOKEN}"}
+
 
 @app.post("/webhook")
 async def handle_minio_event(request: Request):
@@ -37,12 +38,7 @@ async def handle_minio_event(request: Request):
         airflow_payload = {
             "conf": {
                 "Records": [
-                    {
-                        "s3": {
-                            "bucket": {"name": bucket},
-                            "object": {"key": key}
-                        }
-                    }
+                    {"s3": {"bucket": {"name": bucket}, "object": {"key": key}}}
                 ]
             }
         }
@@ -50,14 +46,10 @@ async def handle_minio_event(request: Request):
         response = requests.post(
             AIRFLOW_API_URL,
             headers={**AUTH_HEADER, "Content-Type": "application/json"},
-            json=airflow_payload
+            json=airflow_payload,
         )
 
-        return {
-            "status": response.status_code,
-            "airflow_response": response.text
-        }
+        return {"status": response.status_code, "airflow_response": response.text}
 
     except Exception as e:
         return {"error": str(e)}
-
