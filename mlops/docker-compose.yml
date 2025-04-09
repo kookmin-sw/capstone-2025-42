@@ -91,6 +91,15 @@ services:
       - minio_root_user
       - minio_root_password
 
+  init-db:
+    build:
+      context: ./init-db
+    depends_on:
+      - postgres
+    secrets:
+      - postgresql_user
+      - postgresql_password
+
   webserver:
     build:
       context: ./webserver
