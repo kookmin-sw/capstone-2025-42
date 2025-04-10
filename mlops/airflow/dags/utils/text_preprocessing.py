@@ -110,9 +110,7 @@ def process_keywords(text_list, top_k=15):
     word_scores = dict(zip(vectorizer.get_feature_names_out(), scores))
 
     # 점수 기준 상위 K개 키워드 추출
-    top_keywords = sorted(word_scores.items(), key=lambda x: x[1], reverse=True)[
-        :top_k
-    ]
+    top_keywords = sorted(word_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
     # 초성 기준 그룹핑
     grouped = defaultdict(list)
     for word, _ in top_keywords:
