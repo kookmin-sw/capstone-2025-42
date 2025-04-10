@@ -1,0 +1,146 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgresql_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgresql_password
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - postgresql_user
+      - postgresql_password
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_NOTIFY_WEBHOOK_ENABLE_airflow: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_airflow: "http://proxy:8000/webhook"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    secrets:
+      - minio_root_user
+      - minio_root_password
+
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: airflow
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY_FILE: /run/secrets/airflow_fernet_key
+      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
+      _AIRFLOW_WWW_USER_USERNAME_FILE: /run/secrets/airflow_user
+      _AIRFLOW_WWW_USER_PASSWORD_FILE: /run/secrets/airflow_password
+      MINIO_URL: minio:9000
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+    secrets:
+      - airflow_user
+      - airflow_password
+      - airflow_fernet_key
+      - postgresql_user
+      - postgresql_password
+      - minio_root_user
+      - minio_root_password
+
+  proxy:
+    build:
+      context: ./proxy
+    ports:
+      - "8000:8000"
+    environment:
+      AIRFLOW_URL: http://airflow:8080
+      AIRFLOW_USERNAME_FILE: /run/secrets/airflow_user
+      AIRFLOW_PASSWORD_FILE: /run/secrets/airflow_password
+      DAG_ID: pre_processing_dag
+    secrets:
+      - airflow_user
+      - airflow_password
+
+  init-minio:
+    build:
+      context: .
+      dockerfile: init/Dockerfile
+    entrypoint: [ "sh", "/init/init-minio.sh" ]
+    volumes:
+      - ./init:/init
+    depends_on:
+      - minio
+      - airflow
+    secrets:
+      - minio_root_user
+      - minio_root_password
+
+  init-db:
+    build:
+      context: ./init-db
+    depends_on:
+      - postgres
+    secrets:
+      - postgresql_user
+      - postgresql_password
+
+  webserver:
+    build:
+      context: ./webserver
+    ports:
+      - "8792:8000"
+    environment:
+      MINIO_URL: minio:9000
+      BUCKET_NAME: data-bucket
+      FLASK_APP: app
+      FLASK_ENV: development
+    depends_on:
+      - minio
+      - airflow
+      - postgres
+    volumes:
+      - ./webserver:/app
+    secrets:
+      - minio_root_user
+      - minio_root_password
+      - postgresql_user
+      - postgresql_password
+
+volumes:
+  postgres_data:
+  minio_data:
+  airflow_logs:
+  airflow_plugins:
+
+secrets:
+  airflow_user:
+    file: ./secrets/airflow_user
+  airflow_password:
+    file: ./secrets/airflow_password
+  airflow_fernet_key:
+    file: ./secrets/airflow_fernet_key
+  minio_root_user:
+    file: ./secrets/minio_root_user
+  minio_root_password:
+    file: ./secrets/minio_root_password
+  postgresql_user:
+    file: ./secrets/postgresql_user
+  postgresql_password:
+    file: ./secrets/postgresql_password
+

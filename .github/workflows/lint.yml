@@ -1,0 +1,33 @@
+# .github/workflows/lint.yml
+
+name: Lint Code (PEP8 with flake8)
+
+on: [push, pull_request]
+
+jobs:
+  flake8-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+
+      - name: Run flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run black (check only)
+        run: |
+          pip install black
+          black . --check

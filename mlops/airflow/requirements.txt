@@ -1,0 +1,4 @@
+requests
+minio
+pendulum==2.1.2
+python-magic
