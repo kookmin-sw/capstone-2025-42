@@ -7,14 +7,25 @@
 </head>
 <body class="bg-gray-100 min-h-screen p-8">
   <div class="max-w-5xl mx-auto bg-white p-8 rounded-2xl shadow-xl space-y-12">
-
+    <div class="flex justify-end mb-4">
+      <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">
+        로그아웃
+      </button>
+      <button id="deleteBtn" class="bg-gray-700 text-white px-4 py-2 rounded">
+	계정 삭제
+      </button>
+    </div>
     <!-- 업로드 영역 -->
     <section>
       <h2 class="text-2xl font-bold text-blue-700 mb-4">📄 데이터 업로드</h2>
       <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
         <input type="file" name="file" id="fileInput" class="w-full border px-4 py-2 rounded" multiple required>
         <textarea id="descInput" name="description" rows="3" class="w-full border px-4 py-2 rounded" placeholder="공통 설명 (선택)"></textarea>
-        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">업로드하기</button>
+	<div id="tagSection" class="hidden">
+	  <p class="mt-2 text-sm text-gray-600">추천 태그를 선택하세요:</p>
+	  <div id="tagList" class="flex flex-wrap gap-2 mt-1"></div>
+	</div>
+	<button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">업로드하기</button>
       </form>
 
       <div id="uploadMessage" class="mt-4 text-green-700 font-medium"></div>
@@ -37,9 +48,11 @@
 
         <select id="typeFilter" class="border px-3 py-2 rounded">
           <option value="all">전체</option>
-          <option value="xlsx">.xlsx</option>
-          <option value="hwp">.hwp</option>
-          <option value="jpg">.jpg</option>
+          <option value="text">텍스트</option>
+          <option value="video">비디오</option>
+          <option value="audio">오디오</option>
+          <option value="image">이미지</option>
+          <option value="excel">엑셀</option>
         </select>
 
         <button type="submit"
@@ -66,10 +79,84 @@
     const typeFilter = document.getElementById('typeFilter');
     const uploadMessage = document.getElementById('uploadMessage');
     const pagination = document.getElementById('pagination');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
 
     let uploadedItems = [];
     let currentPage = 1;
     const itemsPerPage = 6;
+
+    deleteBtn.addEventListener('click', async () => {
+      const confirmDelete = confirm("정말로 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다!");
+      if (!confirmDelete) return;
+
+      const res = await fetch('/api/delete_account', {
+        method: 'DELETE',
+        credentials: 'include'  // 쿠키 포함
+      });
+
+      if (res.ok) {
+        alert("계정이 삭제되었습니다.");
+        window.location.reload();  // 로그인 페이지로 리디렉트
+      } else {
+        const data = await res.json();
+        alert(data.message || '계정 삭제 실패');
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      const res = await fetch('/api/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        alert('로그아웃 되었습니다!');
+        window.location.reload();
+      } else {
+        alert('로그아웃 실패');
+      }
+    });
+
+    descInput.addEventListener('blur', () => {
+      const desc = descInput.value.trim();
+      if (!desc) return;
+
+      fetch("/make_tags", {
+        method: "POST",
+	credentials: "include",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ description: desc })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          const tagSection = document.getElementById("tagSection");
+          const tagList = document.getElementById("tagList");
+          tagList.innerHTML = "";
+          tagSection.classList.remove("hidden");
+
+          data.tags.forEach(tag => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = tag;
+            btn.className = "px-2 py-1 rounded border bg-gray-100 hover:bg-blue-200";
+            btn.dataset.selected = "false";
+
+            btn.addEventListener("click", () => {
+              const isSelected = btn.dataset.selected === "true";
+              btn.dataset.selected = (!isSelected).toString();
+              btn.classList.toggle("bg-blue-500", !isSelected);
+              btn.classList.toggle("text-white", !isSelected);
+            });
+
+            tagList.appendChild(btn);
+          });
+        }
+      });
+    });
 
     uploadForm.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -83,8 +170,17 @@
       });
       formData.append("description", desc);
 
+      // 선택된 태그들 추출
+      const selectedTags = Array.from(document.querySelectorAll('#tagList button'))
+        .filter(btn => btn.dataset.selected === "true")
+        .map(btn => btn.textContent);
+
+      // 태그들을 문자열로 서버에 전송
+      formData.append("tags", selectedTags.join(","));
+
       fetch("/upload", {
         method: "POST",
+	credentials: "include",
         body: formData
       })
       .then(res => res.json())
@@ -92,6 +188,8 @@
         uploadMessage.textContent = `${data.files.length}개의 파일이 업로드되었습니다.`;
         setTimeout(() => { uploadMessage.textContent = ''; }, 4000);
         uploadForm.reset();
+        document.getElementById("tagList").innerHTML = "";
+        document.getElementById("tagSection").classList.add("hidden");
       });
     });
 
@@ -102,12 +200,14 @@
     });
 
     function fetchAndRenderFiles() {
-      fetch(`/search?word=${encodeURIComponent(searchInput.value)}`)
+	fetch(`/search?word=${encodeURIComponent(searchInput.value)}&order=${sortSelect.value}&date=${dateFilter.value}&exp=${typeFilter.value}`, {
+	  credentials: "include",
+	})
         .then(res => res.json())
         .then(data => {
           uploadedItems = data.results.map(item => ({
-            title: item.filename,
-	    path: item.realpath,
+            title: item.file_name,
+	    path: item.real_path,
             desc: '',
             time: Date.now(),
           }));
@@ -119,7 +219,7 @@
       downloadList.innerHTML = '';
       uploadedItems.forEach(item => {
         const entry = document.createElement('div');
-        const encodedUrl = `/download?filename=${encodeURIComponent(item.path)}&origin_name=${encodeURIComponent(item.title)}`;
+        const encodedUrl = `/download?file_name=${encodeURIComponent(item.path)}&origin_name=${encodeURIComponent(item.title)}`;
         entry.className = "border p-4 rounded shadow bg-white flex items-center justify-between";
         entry.innerHTML = `
           <span class="font-medium text-gray-800">${item.title}</span>

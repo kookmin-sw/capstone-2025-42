@@ -11,6 +11,8 @@ import psycopg2
 import magic
 import zipfile
 from urllib.parse import unquote_plus
+from utils.video_preprocessing import process_video
+import whisper
 
 
 def load_secret(name):
@@ -27,6 +29,7 @@ MINIO_ACCESS_KEY = load_secret("minio_root_user")
 MINIO_SECRET_KEY = load_secret("minio_root_password")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
+MODEL = whisper.load_model("tiny")
 
 
 def is_hwp(filepath):
@@ -90,11 +93,13 @@ def get_file_type_by_magic(filepath):
 
 def process_data(meta, file):
     file_type = get_file_type_by_magic(file)
+    data = {}
     final_text = "test_text_default"
     if file_type == "image":
         final_text = "test_text_img"
     elif file_type == "video":
-        final_text = "test_text_video"
+        data = process_video(file, MODEL)
+        data["text"] += " "
     elif file_type == "audio":
         final_text = "test_text_audio"
     elif file_type == "text":
@@ -105,9 +110,20 @@ def process_data(meta, file):
     json_data = {}
     with open(meta) as f:
         json_data = json.load(f)
-    json_data["datetime"] = "sampledate"
-    json_data["location"] = "samplelocation"
-    return json_data, final_text
+    find_key = ["createdate", "gpslatitude", "gpslongitude"]
+    data["text"] += json_data["description"]
+    if "createdate" in data["metadata"]:
+        json_data["datetime"] = data["metadata"]["createdate"]
+    else:
+        json_data["datetime"] = ""
+    if ("gpslatitude" in data["metadata"]) and ("gpslongitude" in data["metadata"]):
+        json_data["location"] = (
+            f'{data["metadata"]["gpslatitude"]|data["metadata"]["gpslongitude"]}'
+        )
+    else:
+        json_data["location"] = ""
+    json_data["file_type"] = file_type
+    return json_data, data["text"]
 
 
 with DAG(
@@ -148,8 +164,8 @@ with DAG(
         with open(meta_local_path) as f:
             meta = json.load(f)
 
-        filename_list = meta["filename"].rsplit(".", 1)
-        original_file_key = f"{filename_list[0]}_{meta['uuid']}.{filename_list[-1]}"
+        file_name_list = meta["file_name"].rsplit(".", 1)
+        original_file_key = f"{file_name_list[0]}_{meta['uuid']}.{file_name_list[-1]}"
         file_local_path = os.path.join(
             local_folder, os.path.basename(original_file_key)
         )
@@ -172,46 +188,63 @@ with DAG(
             password=POSTGRESQL_PASSWORD,
         )
         cur = conn.cursor()
+
+        file_name_list = meta_data["file_name"].rsplit(".", 1)
+        file_path = f"{file_name_list[0]}_{meta_data['uuid']}.{file_name_list[-1]}"
+
         cur.execute(
             """
-            CREATE TABLE IF NOT EXISTS file_data (
-                id SERIAL PRIMARY KEY,
-                filename TEXT,
-                result TEXT
-            );
-        """
-        )
-        cur.execute(
-            "INSERT INTO file_data (filename, result) VALUES (%s, %s);",
-            (os.path.basename(file), final_text),
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS file_meta_data (
-                id SERIAL PRIMARY KEY,
-                filename TEXT,
-                description TEXT,
-                location TEXT,
-                datetime TEXT,
-                uuid TEXT
-            );
-        """
-        )
-        cur.execute(
-            """
-            INSERT INTO file_meta_data (
-                filename, description, location, datetime, uuid
-            ) VALUES (%s, %s, %s, %s, %s);
+            INSERT INTO uploaded_file (
+                file_name, file_type, file_path, file_period, uuid, uploaded_at, description, uploader_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING file_id;
             """,
             (
-                os.path.basename(file),
-                meta_data["description"],
-                meta_data["location"],
+                meta_data["file_name"],
+                meta_data["file_type"],
+                file_path,
                 meta_data["datetime"],
                 meta_data["uuid"],
+                meta_data["upload_time"],
+                final_text,
+                meta_data["user_id"],
             ),
         )
+        file_id = cur.fetchone()[0]
+
+        insert_sql = """
+            INSERT INTO tags (tag_name, description)
+            VALUES (%s, %s)
+            ON CONFLICT (tag_name) DO NOTHING;
+        """
+        tags = meta_data["tags"].split(",")
+        tag_values = [(tag.strip(), "") for tag in tags]
+
+        cur.executemany(insert_sql, tag_values)
         conn.commit()
+
+        if meta_data["tags"] != "":
+            tag_names = meta_data["tags"].split(",")
+            placeholders = ",".join(["%s"] * len(tag_names))
+            sql = (
+                f"SELECT tag_id, tag_name FROM tags WHERE tag_name IN ({placeholders})"
+            )
+            cur.execute(sql, tag_names)
+            rows = cur.fetchall()
+            tag_map = {name: tag_id for tag_id, name in rows}
+            for tag_name in tag_names:
+                tag_id = tag_map.get(tag_name)
+                if tag_id:
+                    cur.execute(
+                        """
+                            INSERT INTO file_tags (file_id, tag_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING;
+                        """,
+                        (file_id, tag_id),
+                    )
+            conn.commit()
+
         cur.close()
         conn.close()
         os.remove(meta)
