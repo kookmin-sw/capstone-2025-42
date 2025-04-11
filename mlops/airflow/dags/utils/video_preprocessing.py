@@ -56,22 +56,26 @@ def extract_audio(video_path, audio_path=None):
 
 # Whisper를 사용하여 오디오를 텍스트로 변환
 def transcribe_audio(audio_path, model):
-    result = model.transcribe(audio_path)
+    # result = model.transcribe(audio_path, verbose=True)
+    result = {"text": "test_text"}
     return result["text"]
 
 
 # 전체 영상 처리 함수
 def process_video(video_file, model):
+    print("get_metadata")
     metadata = get_metadata(video_file)
     if metadata is None:
         print("Failed to extract metadata")
         return None
 
+    print("extract_audio")
     audio_file = extract_audio(video_file)
     if audio_file is None:
         print("Failed to extract audio")
         return None
 
+    print("transcribe_audio")
     audio_text = transcribe_audio(audio_file, model)
 
     # 리소스 정리

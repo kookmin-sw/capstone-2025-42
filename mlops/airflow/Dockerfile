@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libmagic1 \
     libmagic-dev \
+    libimage-exiftool-perl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow

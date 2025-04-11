@@ -121,6 +121,7 @@ services:
       - minio_root_password
       - postgresql_user
       - postgresql_password
+      - jwt_secret_key
 
 volumes:
   postgres_data:
@@ -143,4 +144,6 @@ secrets:
     file: ./secrets/postgresql_user
   postgresql_password:
     file: ./secrets/postgresql_password
+  jwt_secret_key:
+    file: ./secrets/jwt_secret_key
 
