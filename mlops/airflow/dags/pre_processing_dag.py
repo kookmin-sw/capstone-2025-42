@@ -12,7 +12,6 @@ import magic
 import zipfile
 from urllib.parse import unquote_plus
 from utils.video_preprocessing import process_video
-import whisper
 
 
 def load_secret(name):
@@ -29,7 +28,6 @@ MINIO_ACCESS_KEY = load_secret("minio_root_user")
 MINIO_SECRET_KEY = load_secret("minio_root_password")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
-MODEL = whisper.load_model("tiny")
 
 
 def is_hwp(filepath):
@@ -98,7 +96,7 @@ def process_data(meta, file):
     if file_type == "image":
         final_text = "test_text_img"
     elif file_type == "video":
-        data = process_video(file, MODEL)
+        data = process_video(file)
         data["text"] += " "
     elif file_type == "audio":
         final_text = "test_text_audio"
