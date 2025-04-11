@@ -1,4 +1,4 @@
-import whisper
+from faster_whisper import WhisperModel
 import subprocess
 import os
 import json
@@ -54,15 +54,22 @@ def extract_audio(video_path, audio_path=None):
     return audio_path
 
 
+def get_whisper_model():
+    return WhisperModel("base", device="cpu", compute_type="int8")
+
+
 # Whisper를 사용하여 오디오를 텍스트로 변환
-def transcribe_audio(audio_path, model):
-    # result = model.transcribe(audio_path, verbose=True)
-    result = {"text": "test_text"}
-    return result["text"]
+def transcribe_audio(audio_path):
+    model = get_whisper_model()
+    segments, result = model.transcribe(audio_path)
+    text = ""
+    for segment in segments:
+        text += f"{segment.text} "
+    return text
 
 
 # 전체 영상 처리 함수
-def process_video(video_file, model):
+def process_video(video_file):
     print("get_metadata")
     metadata = get_metadata(video_file)
     if metadata is None:
@@ -76,7 +83,7 @@ def process_video(video_file, model):
         return None
 
     print("transcribe_audio")
-    audio_text = transcribe_audio(audio_file, model)
+    audio_text = transcribe_audio(audio_file)
 
     # 리소스 정리
     try:
@@ -90,12 +97,3 @@ def process_video(video_file, model):
         pass
 
     return {"metadata": metadata, "text": audio_text}
-
-
-if __name__ == "__main__":
-    model = whisper.load_model("base")
-    video_file = "test.mp4"
-    result = process_video(video_file, model)
-    if result:
-        print(result["metadata"])
-        print(result["text"])
