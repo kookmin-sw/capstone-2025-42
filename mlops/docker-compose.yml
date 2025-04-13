@@ -72,7 +72,7 @@ services:
       AIRFLOW_URL: http://airflow:8080
       AIRFLOW_USERNAME_FILE: /run/secrets/airflow_user
       AIRFLOW_PASSWORD_FILE: /run/secrets/airflow_password
-      DAG_ID: pre_processing_dag
+      DAG_ID: process_router_dag
     secrets:
       - airflow_user
       - airflow_password

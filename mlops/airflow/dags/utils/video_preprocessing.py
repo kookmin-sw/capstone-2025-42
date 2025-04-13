@@ -4,6 +4,12 @@ import os
 import json
 import shutil
 from pathlib import Path
+import cv2
+import numpy as np
+from transformers import BlipProcessor, BlipForConditionalGeneration
+import argostranslate.package
+from argostranslate.translate import translate
+from PIL import Image
 
 
 # 영상에서 메타데이터 추출 (Exiftool 사용)
@@ -68,6 +74,76 @@ def transcribe_audio(audio_path):
     return text
 
 
+def contains_english(text):
+    return any("a" <= c.lower() <= "z" for c in text)
+
+
+def get_en_kr_model():
+    available_packages = argostranslate.package.get_available_packages()
+
+    package_to_install = list(
+        filter(lambda x: x.from_code == "en" and x.to_code == "ko", available_packages)
+    )[0]
+
+    download_path = package_to_install.download()
+    argostranslate.package.install_from_path(download_path)
+
+
+# 영상 프레임 추출 (1초당 1프레임)
+def extract_frames(video_path, output_folder="frames", frame_rate=0.2):
+    os.makedirs(output_folder, exist_ok=True)
+    command = [
+        "ffmpeg",
+        "-i",
+        video_path,
+        "-vf",
+        f"fps={frame_rate}",
+        f"{output_folder}/frame_%04d.png",
+        "-y",
+    ]
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+# BLIP 이미지 설명 생성
+def generate_caption(image_path, processor, model):
+    image = Image.open(image_path).convert("RGB")
+    inputs = processor(images=image, return_tensors="pt")
+    output = model.generate(**inputs)
+    return processor.decode(output[0], skip_special_tokens=True)
+
+
+def get_blip_model():
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    video_model = BlipForConditionalGeneration.from_pretrained(
+        "Salesforce/blip-image-captioning-base"
+    )
+    return processor, video_model
+
+
+def make_text_display_in_video(frame_folder="frames"):
+    text = []
+
+    processor, model = get_blip_model()
+    get_en_kr_model()
+
+    for i in range(1, 1000):
+        frame_path = f"{frame_folder}/frame_{i:04d}.png"
+        try:
+            caption = generate_caption(frame_path, processor, model)
+            caption = translate(caption, "en", "ko")
+            words = caption.split(" ")
+            kor_words = []
+            for j in range(len(words)):
+                if not contains_english(words[j]):
+                    kor_words.append(words[j])
+            caption = " ".join(kor_words)
+            text.append(caption)
+        except FileNotFoundError:
+            break
+
+    return " ".join(text)
+
+
 # 전체 영상 처리 함수
 def process_video(video_file):
     print("get_metadata")
@@ -85,6 +161,14 @@ def process_video(video_file):
     print("transcribe_audio")
     audio_text = transcribe_audio(audio_file)
 
+    print("get frames")
+    extract_frames(video_file)
+
+    print("make frame description")
+    display_text = make_text_display_in_video("frames")
+
+    real_text = f"{audio_text} {display_text}"
+
     # 리소스 정리
     try:
         os.remove(audio_file)
@@ -96,4 +180,4 @@ def process_video(video_file):
     except FileNotFoundError:
         pass
 
-    return {"metadata": metadata, "text": audio_text}
+    return {"metadata": metadata, "text": real_text}
