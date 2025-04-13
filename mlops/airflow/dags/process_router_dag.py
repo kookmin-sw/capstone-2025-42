@@ -8,7 +8,7 @@ from minio import Minio
 import magic
 from utils.minio_utils import download_meta_and_file
 from utils.secrets import load_secret
-from utils.airflow_utils import get_file_type_by_magic
+from utils.airflow_utils import get_file_type_by_magic, is_hwpx
 
 
 MINIO_URL = os.getenv("MINIO_URL", "minio:9000")
@@ -71,11 +71,43 @@ with DAG(
         },
         trigger_rule="none_failed",
     )
+    
+    trigger_image_dag = TriggerDagRunOperator(
+        task_id="trigger_image_dag",
+        trigger_dag_id="image_processing_dag",
+        execution_date="{{ execution_date }}",
+        wait_for_completion=False,
+        reset_dag_run=True,
+        conf={
+            "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
+            "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}"
+        },
+        trigger_rule="none_failed",
+    )
+    
+    trigger_text_dag = TriggerDagRunOperator(
+        task_id="trigger_text_dag",
+        trigger_dag_id="text_processing_dag",
+        execution_date="{{ execution_date }}",
+        wait_for_completion=False,
+        reset_dag_run=True,
+        conf={
+            "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
+            "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}"
+        },
+        trigger_rule="none_failed",
+    )
 
     def branch(**context):
         file_type = context["ti"].xcom_pull(task_ids="decide_file_type", key="file_type")
         if file_type == "video":
             return "trigger_video_dag"
+        elif file_type == "image":
+            return "trigger_image_dag"
+        elif file_type == "text":
+            return "trigger_text_dag"
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
 
@@ -85,4 +117,4 @@ with DAG(
         provide_context=True,
     )
 
-    decide_file_type >> branch_op >> [trigger_video_dag]
+    decide_file_type >> branch_op >> [trigger_video_dag, trigger_image_dag, trigger_text_dag]

@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     uuid TEXT NOT NULL,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     uploader_id TEXT,
-    description TEXT
+    description TEXT,
+    location TEXT
 );
 """
 

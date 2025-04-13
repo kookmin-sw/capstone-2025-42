@@ -32,8 +32,8 @@ def save_to_db(**context):
     cur.execute(
         """
         INSERT INTO uploaded_file (
-            file_name, file_type, file_path, file_period, uuid, uploaded_at, description, uploader_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            file_name, file_type, file_path, file_period, uuid, uploaded_at, description, uploader_id, location
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING file_id;
         """,
         (
@@ -45,6 +45,7 @@ def save_to_db(**context):
             meta_data["upload_time"],
             final_text,
             meta_data["user_id"],
+            meta_data["location"],
         ),
     )
     file_id = cur.fetchone()[0]

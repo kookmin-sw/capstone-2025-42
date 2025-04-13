@@ -9,5 +9,11 @@ openai-clip
 opencv-python
 summa
 argostranslate
-opencv-python
 pillow
+opencv-python-headless
+ultralytics
+python-docx
+python-pptx
+PyMuPDF
+olefile
+PyPDF2

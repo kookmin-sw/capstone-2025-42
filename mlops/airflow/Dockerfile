@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libimage-exiftool-perl \
     ffmpeg \
     gawk \
+    libgl1 \
+    libglib2.0-0 \
+    perl \
+    antiword \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow

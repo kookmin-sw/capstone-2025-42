@@ -8,7 +8,6 @@ import cv2
 import numpy as np
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import argostranslate.package
-import argostranslate.translate
 from argostranslate.translate import translate
 from PIL import Image
 

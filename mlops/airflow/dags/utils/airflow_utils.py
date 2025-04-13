@@ -1,6 +1,7 @@
 import magic
 import zipfile
 import json
+import olefile
 
 
 def make_json_meta_file(data, meta, file_type):
@@ -17,7 +18,7 @@ def make_json_meta_file(data, meta, file_type):
         json_data["datetime"] = ""
     if ("gpslatitude" in data["metadata"]) and ("gpslongitude" in data["metadata"]):
         json_data["location"] = (
-            f'{data["metadata"]["gpslatitude"]|data["metadata"]["gpslongitude"]}'
+            f'{data["metadata"]["gpslatitude"], data["metadata"]["gpslongitude"]}'
         )
     else:
         json_data["location"] = ""
@@ -27,10 +28,37 @@ def make_json_meta_file(data, meta, file_type):
     return json_data
 
 
-def is_hwp(filepath):
-    with open(filepath, "rb") as f:
-        header = f.read(8)
-        return header == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+def is_doc_ppt_hwp(filepath):
+    if not olefile.isOleFile(filepath):
+        return False
+
+    try:
+        with olefile.OleFileIO(filepath) as ole:
+            streams = ole.listdir()
+            stream_names = [".".join(s) for s in streams]
+
+            if any("PowerPoint Document" in s for s in stream_names):
+                return True
+            elif any("WordDocument" in s for s in stream_names):
+                return True
+            elif any(s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]):
+                return True
+            else:
+                return False
+    except:
+        pass
+    return False
+
+
+def is_hwpx(filepath):
+    try:
+        with zipfile.ZipFile(filepath, 'r') as zipf:
+            names = zipf.namelist()
+            if any(name.startswith("Contents/") for name in names):
+                return True
+    except:
+        pass
+    return False
 
 
 def is_pdf(filepath):
@@ -42,16 +70,18 @@ def is_pdf(filepath):
 def get_file_type_by_magic(filepath):
     mime = magic.Magic(mime=True)
     mime_type = mime.from_file(filepath)
-    if mime_type == "application/zip":
+    if is_hwpx(filepath):
+        return "text"
+    elif mime_type == "application/zip":
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
-                names = zipf.namelist()
-                if "word/document.xml" in names:
+                names = [name.replace("\\", "/") for name in zipf.namelist()]
+                if any(name.endswith("word/document.xml") for name in names):
                     return "text"
-                elif "xl/workbook.xml" in names:
+                elif any(name.endswith("ppt/presentation.xml") for name in names):
+                    return "text"
+                elif any(name.endswith("xl/workbook.xml") for name in names):
                     return "excel"
-                elif "ppt/presentation.xml" in names:
-                    return "text"
         except:
             pass
     elif (
@@ -60,8 +90,19 @@ def get_file_type_by_magic(filepath):
     ):
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
-                names = zipf.namelist()
-                if "word/document.xml" in names:
+                names = [name.replace("\\", "/") for name in zipf.namelist()]
+                if any(name.endswith("word/document.xml") for name in names):
+                    return "text"
+        except:
+            pass
+    elif (
+        mime_type
+        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    ):
+        try:
+            with zipfile.ZipFile(filepath, "r") as zipf:
+                names = [name.replace("\\", "/") for name in zipf.namelist()]
+                if any(name.endswith("ppt/presentation.xml") for name in names):
                     return "text"
         except:
             pass
@@ -78,9 +119,9 @@ def get_file_type_by_magic(filepath):
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ]:
         return "excel"
-    elif is_hwp(filepath):
-        return "text"
     elif is_pdf(filepath):
+        return "text"
+    elif is_doc_ppt_hwp(filepath):
         return "text"
     else:
         return f"unknown ({mime_type})"
