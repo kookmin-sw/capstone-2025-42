@@ -56,8 +56,8 @@ def extract_audio(video_path, audio_path=None):
 
 # Whisper를 사용하여 오디오를 텍스트로 변환
 def transcribe_audio(audio_path, model):
-    # result = model.transcribe(audio_path, verbose=True)
-    result = {"text": "test_text"}
+    result = model.transcribe(audio_path, verbose=True)
+    #result = {"text": "test_text"}
     return result["text"]
 
 

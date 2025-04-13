@@ -14,6 +14,8 @@ from urllib.parse import unquote_plus
 from utils.video_preprocessing import process_video
 import whisper
 
+from utils.image_preprocessing import process_image, load_yolo_model
+from transformers import BlipProcessor, BlipForConditionalGeneration
 
 def load_secret(name):
     path = f"/run/secrets/{name}"
@@ -96,7 +98,16 @@ def process_data(meta, file):
     data = {}
     final_text = "test_text_default"
     if file_type == "image":
-        final_text = "test_text_img"
+        
+        #모델 로딩
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        yolo_model = load_yolo_model() 
+
+        result = process_image(file, processor, blip_model, yolo_model)
+        
+        return result["meta"], result["text"]
+    
     elif file_type == "video":
         data = process_video(file, MODEL)
         data["text"] += " "
@@ -171,10 +182,24 @@ with DAG(
         )
         client.fget_object(bucket_name, original_file_key, file_local_path)
 
-        return meta_local_path, file_local_path
+        print("✅ meta_local_path:", meta_local_path)
+        print("✅ file_local_path:", file_local_path)
+
+        return {
+    "meta": meta_local_path,
+    "file": file_local_path
+}
+
 
     def process_and_save(**context):
-        meta, file = context["ti"].xcom_pull(task_ids="download_from_minio")
+        paths = context["ti"].xcom_pull(task_ids="download_from_minio")
+        if not paths:
+            print("No XCom result received.")
+            return
+
+        meta = paths["meta"]
+        file = paths["file"]    
+
         if (not meta) or (not file):
             print("No meta or file found.")
             return

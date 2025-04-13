@@ -7,3 +7,7 @@ openai
 ffmpeg
 git+https://github.com/openai/whisper.git
 transformers
+opencv-python-headless 
+Pillow
+transformers
+ultralytics

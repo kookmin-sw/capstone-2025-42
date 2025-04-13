@@ -1,16 +1,20 @@
 FROM apache/airflow:2.8.1-python3.9
 
 USER root
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     libmagic1 \
     libmagic-dev \
+    libgl1 \
+    libglib2.0-0 \
+    perl \
     libimage-exiftool-perl \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow
+
 COPY airflow/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
@@ -21,4 +25,3 @@ RUN chmod +x /setup.sh
 USER airflow
 
 ENTRYPOINT ["/setup.sh"]
-
