@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic-dev \
     libimage-exiftool-perl \
     ffmpeg \
+    gawk \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow
@@ -21,4 +22,3 @@ RUN chmod +x /setup.sh
 USER airflow
 
 ENTRYPOINT ["/setup.sh"]
-

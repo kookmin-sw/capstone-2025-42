@@ -4,3 +4,10 @@ pendulum==2.1.2
 python-magic
 faster-whisper
 ffmpeg
+transformers
+openai-clip
+opencv-python
+summa
+argostranslate
+opencv-python
+pillow

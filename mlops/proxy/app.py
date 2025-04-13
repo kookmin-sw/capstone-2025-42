@@ -6,7 +6,7 @@ import base64
 app = FastAPI()
 
 AIRFLOW_URL = os.getenv("AIRFLOW_URL", "http://airflow:8080")
-DAG_ID = os.getenv("DAG_ID", "pre_processing_dag")
+DAG_ID = os.getenv("DAG_ID", "process_router_dag")
 
 
 def load_secret(name, default=""):
