@@ -73,6 +73,7 @@ def transcribe_audio(audio_path):
         text += f"{segment.text} "
     return text
 
+
 def contains_english(text):
     return any("a" <= c.lower() <= "z" for c in text)
 

@@ -24,7 +24,7 @@ def make_json_meta_file(data, meta, file_type):
         json_data["location"] = ""
     json_data["file_type"] = file_type
     json_data["text"] = data["text"]
-    
+
     return json_data
 
 
@@ -41,7 +41,9 @@ def is_doc_ppt_hwp(filepath):
                 return True
             elif any("WordDocument" in s for s in stream_names):
                 return True
-            elif any(s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]):
+            elif any(
+                s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]
+            ):
                 return True
             else:
                 return False
@@ -52,7 +54,7 @@ def is_doc_ppt_hwp(filepath):
 
 def is_hwpx(filepath):
     try:
-        with zipfile.ZipFile(filepath, 'r') as zipf:
+        with zipfile.ZipFile(filepath, "r") as zipf:
             names = zipf.namelist()
             if any(name.startswith("Contents/") for name in names):
                 return True

@@ -6,6 +6,7 @@ import json, os
 from utils.video_preprocessing import process_video
 from utils.airflow_utils import make_json_meta_file
 
+
 def process_and_save_intermediate(**context):
     conf = context["dag_run"].conf
     meta = conf["meta_path"]
@@ -23,6 +24,7 @@ def process_and_save_intermediate(**context):
 
     os.remove(meta)
     os.remove(file)
+
 
 with DAG(
     dag_id="video_processing_dag",

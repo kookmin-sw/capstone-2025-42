@@ -67,11 +67,11 @@ with DAG(
         conf={
             "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
             "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
-            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}"
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}",
         },
         trigger_rule="none_failed",
     )
-    
+
     trigger_image_dag = TriggerDagRunOperator(
         task_id="trigger_image_dag",
         trigger_dag_id="image_processing_dag",
@@ -81,11 +81,11 @@ with DAG(
         conf={
             "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
             "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
-            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}"
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}",
         },
         trigger_rule="none_failed",
     )
-    
+
     trigger_text_dag = TriggerDagRunOperator(
         task_id="trigger_text_dag",
         trigger_dag_id="text_processing_dag",
@@ -95,13 +95,15 @@ with DAG(
         conf={
             "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
             "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
-            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}"
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}",
         },
         trigger_rule="none_failed",
     )
 
     def branch(**context):
-        file_type = context["ti"].xcom_pull(task_ids="decide_file_type", key="file_type")
+        file_type = context["ti"].xcom_pull(
+            task_ids="decide_file_type", key="file_type"
+        )
         if file_type == "video":
             return "trigger_video_dag"
         elif file_type == "image":
@@ -117,4 +119,8 @@ with DAG(
         provide_context=True,
     )
 
-    decide_file_type >> branch_op >> [trigger_video_dag, trigger_image_dag, trigger_text_dag]
+    (
+        decide_file_type
+        >> branch_op
+        >> [trigger_video_dag, trigger_image_dag, trigger_text_dag]
+    )

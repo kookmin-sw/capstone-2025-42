@@ -20,12 +20,12 @@ logging.basicConfig(level=logging.INFO)
 def to_iso_str(dt):
     """datetime 또는 문자열을 ISO 8601 문자열로 변환"""
     if isinstance(dt, datetime.datetime):
-        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
     elif isinstance(dt, str):
         dt = dt.replace("D:", "").strip()
         try:
             parsed = datetime.datetime.strptime(dt[:14], "%Y%m%d%H%M%S")
-            return parsed.strftime('%Y-%m-%dT%H:%M:%S')
+            return parsed.strftime("%Y-%m-%dT%H:%M:%S")
         except:
             return ""
     return ""
@@ -47,11 +47,11 @@ def get_ole_created_date(path):
 
 def get_office_openxml_created_date(path):
     try:
-        with zipfile.ZipFile(path, 'r') as z:
-            core_xml = z.read('docProps/core.xml')
+        with zipfile.ZipFile(path, "r") as z:
+            core_xml = z.read("docProps/core.xml")
             root = ET.fromstring(core_xml)
-            ns = {'dcterms': 'http://purl.org/dc/terms'}
-            created = root.find('dcterms:created', ns)
+            ns = {"dcterms": "http://purl.org/dc/terms"}
+            created = root.find("dcterms:created", ns)
             if created is not None:
                 return to_iso_str(created.text)
     except:
@@ -61,14 +61,14 @@ def get_office_openxml_created_date(path):
 
 def get_hwpx_created_date(path):
     try:
-        with zipfile.ZipFile(path, 'r') as z:
+        with zipfile.ZipFile(path, "r") as z:
             for name in z.namelist():
                 if "FileHeader.xml" in name:
                     content = z.read(name)
                     tree = ET.fromstring(content)
                     for elem in tree.iter():
-                        if 'dateCreated' in elem.attrib:
-                            return to_iso_str(elem.attrib['dateCreated'])
+                        if "dateCreated" in elem.attrib:
+                            return to_iso_str(elem.attrib["dateCreated"])
     except:
         pass
     return ""
@@ -76,10 +76,10 @@ def get_hwpx_created_date(path):
 
 def get_pdf_created_date(path):
     try:
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
             info = reader.metadata
-            return to_iso_str(info.get('/CreationDate'))
+            return to_iso_str(info.get("/CreationDate"))
     except:
         return ""
 
@@ -106,8 +106,7 @@ def extract_ppt(filepath):
 
             # 한글/영문 UTF-16LE만 추출
             matches = re.findall(
-                rb'((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})',
-                data
+                rb"((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})", data
             )
 
             results = []
@@ -149,8 +148,7 @@ def extract_hwp(filepath):
 
                     # 한글/영문 UTF-16LE만 추출
                     matches = re.findall(
-                        rb'((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})',
-                        data
+                        rb"((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})", data
                     )
 
                     results = []
@@ -166,11 +164,10 @@ def extract_hwp(filepath):
     return text
 
 
-
 # HWPX 문서에서 텍스트 추출
 def extract_hwpx(path):
     texts = []
-    with zipfile.ZipFile(path, 'r') as z:
+    with zipfile.ZipFile(path, "r") as z:
         for name in z.namelist():
             if name.startswith("Contents/section") and name.endswith(".xml"):
                 content = z.read(name)
@@ -179,7 +176,7 @@ def extract_hwpx(path):
                     if t_elem.tag.endswith("t") and t_elem.text:
                         try:
                             # 이스케이프된 한글 바이트인 경우 decode 시도
-                            decoded = bytes(t_elem.text, 'latin1').decode('utf-8')
+                            decoded = bytes(t_elem.text, "latin1").decode("utf-8")
                             texts.append(decoded)
                         except:
                             texts.append(t_elem.text.strip())
@@ -253,7 +250,9 @@ def process_text(filepath):
                 ext = "ppt"
             elif any("WordDocument" in s for s in stream_names):
                 ext = "doc"
-            elif any(s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]):
+            elif any(
+                s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]
+            ):
                 ext = "hwp"
         except:
             pass
@@ -280,7 +279,7 @@ def process_text(filepath):
             pass
     elif (
         mime_type
-        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"  
+        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
@@ -290,7 +289,7 @@ def process_text(filepath):
         except:
             pass
     try:
-        with zipfile.ZipFile(filepath, 'r') as zipf:
+        with zipfile.ZipFile(filepath, "r") as zipf:
             names = zipf.namelist()
             if any(name.startswith("Contents/") for name in names):
                 ext = "hwpx"
@@ -309,7 +308,7 @@ def process_text(filepath):
         "hwpx": extract_hwpx,
         "docx": extract_docx,
         "pptx": extract_pptx,
-        "pdf": extract_pdf
+        "pdf": extract_pdf,
     }.get(ext)
 
     meta_extractor = {
@@ -319,10 +318,13 @@ def process_text(filepath):
         "hwpx": get_hwpx_created_date,
         "docx": get_office_openxml_created_date,
         "pptx": get_office_openxml_created_date,
-        "pdf": get_pdf_created_date
+        "pdf": get_pdf_created_date,
     }.get(ext)
 
     if text_extractor and meta_extractor:
-        return {"metadata": {"createdate": meta_extractor(filepath)}, "text": text_extractor(filepath)}
+        return {
+            "metadata": {"createdate": meta_extractor(filepath)},
+            "text": text_extractor(filepath),
+        }
     else:
         return {"metadata": {"createdate": ""}, "text": ""}

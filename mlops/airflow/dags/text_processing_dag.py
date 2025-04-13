@@ -6,13 +6,14 @@ import json, os
 from utils.text_preprocessing import process_text
 from utils.airflow_utils import make_json_meta_file
 
+
 def process_and_save_intermediate(**context):
     conf = context["dag_run"].conf
     meta = conf["meta_path"]
     file = conf["file_path"]
     file_type = conf["file_type"]
 
-    #data = process_video(file)
+    # data = process_video(file)
     data = process_text(file)
     results = make_json_meta_file(data, meta, file_type)
 
@@ -24,6 +25,7 @@ def process_and_save_intermediate(**context):
 
     os.remove(meta)
     os.remove(file)
+
 
 with DAG(
     dag_id="text_processing_dag",

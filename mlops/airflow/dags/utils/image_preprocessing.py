@@ -63,7 +63,9 @@ def load_yolo_model():
 
 def load_blip_model():
     processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    blip_model = BlipForConditionalGeneration.from_pretrained(
+        "Salesforce/blip-image-captioning-base"
+    )
     return processor, blip_model
 
 
@@ -102,7 +104,4 @@ def process_image(image_file):
 
     text = f"이 이미지에는 {', '.join(labels)} 등이 있으며, 설명은 다음과 같습니다: {caption}"
 
-    return {
-        "metadata": metadata,
-        "text": text
-    }
+    return {"metadata": metadata, "text": text}

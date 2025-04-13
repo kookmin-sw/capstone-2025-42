@@ -2,6 +2,7 @@ import os
 import json
 from urllib.parse import unquote_plus
 
+
 def download_meta_and_file(client, bucket, meta_key):
     meta_key = unquote_plus(meta_key)
     local_folder = "/opt/airflow/files"

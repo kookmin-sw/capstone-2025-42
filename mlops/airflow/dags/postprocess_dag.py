@@ -8,6 +8,7 @@ from utils.secrets import load_secret
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 
+
 def save_to_db(**context):
     conf = context["dag_run"].conf
     result_path = conf["result_path"]
@@ -62,7 +63,10 @@ def save_to_db(**context):
 
     if meta_data["tags"] != "":
         placeholders = ",".join(["%s"] * len(tags))
-        cur.execute(f"SELECT tag_id, tag_name FROM tags WHERE tag_name IN ({placeholders})", tags)
+        cur.execute(
+            f"SELECT tag_id, tag_name FROM tags WHERE tag_name IN ({placeholders})",
+            tags,
+        )
         rows = cur.fetchall()
         tag_map = {name: tag_id for tag_id, name in rows}
         for tag in tags:
@@ -77,6 +81,7 @@ def save_to_db(**context):
     cur.close()
     conn.close()
     os.remove(result_path)
+
 
 with DAG(
     dag_id="postprocess_dag",
