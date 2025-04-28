@@ -14,7 +14,9 @@ read_secret() {
 AIRFLOW_USER=$(read_secret airflow_user)
 AIRFLOW_PASSWORD=$(read_secret airflow_password)
 AIRFLOW_FERNET_KEY=$(read_secret airflow_fernet_key)
+POSTGRES_HOST=$(read_secret postgresql_host)
 POSTGRES_USER=$(read_secret postgresql_user)
+POSTGRES_PASSWORD=$(read_secret postgresql_password)
 POSTGRES_PASSWORD=$(read_secret postgresql_password)
 export AIRFLOW__CORE__SQL_ALCHEMY_CONN="postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow"
 

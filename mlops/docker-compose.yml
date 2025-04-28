@@ -62,6 +62,9 @@ services:
       - postgresql_password
       - minio_root_user
       - minio_root_password
+      - kma_api_key
+      - postgresql_host
+      - postgresql_database
 
   proxy:
     build:
@@ -146,4 +149,9 @@ secrets:
     file: ./secrets/postgresql_password
   jwt_secret_key:
     file: ./secrets/jwt_secret_key
-
+  kma_api_key:
+    file: ./secrets/kma_api_key
+  postgresql_host:
+    file: ./secrets/postgresql_host
+  postgresql_database:
+    file: ./secrets/postgresql_database

@@ -37,7 +37,11 @@ docker-compose down -v
 │   ├── minio_root_password
 │   ├── minio_root_user
 │   ├── postgresql_password
-│   └── postgresql_user
+│   ├── postgresql_user
+│   ├── postgresql_host
+│   ├── postgresql_database
+│   ├── jwt_secret_key
+│   └── kma_api_key
 └── webserver
     ├── Dockerfile
     └── app.py

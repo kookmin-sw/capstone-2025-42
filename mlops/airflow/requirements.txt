@@ -17,3 +17,6 @@ python-pptx
 PyMuPDF
 olefile
 PyPDF2
+pandas
+requests
+psycopg2-binary
