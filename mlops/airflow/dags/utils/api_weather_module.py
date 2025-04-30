@@ -19,23 +19,30 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
     row_count = len(df)
     is_empty = row_count == 0  # ✅ 빈 데이터 여부
 
-    station_id = df["STN_ID"].iloc[0] if "STN_ID" in df.columns and not df.empty else None
+    station_id = (
+        df["STN_ID"].iloc[0] if "STN_ID" in df.columns and not df.empty else None
+    )
 
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             INSERT INTO weather_meta 
             (table_name, category, year, month, station_id, row_count, columns, is_empty)
             VALUES (:table_name, :category, :year, :month, :station_id, :row_count, :columns, :is_empty)
-        """), {
-            "table_name": table_name,
-            "category": category,
-            "year": year,
-            "month": month,
-            "station_id": station_id,
-            "row_count": row_count,
-            "columns": json.dumps(col_list),
-            "is_empty": is_empty
-        })
+        """
+            ),
+            {
+                "table_name": table_name,
+                "category": category,
+                "year": year,
+                "month": month,
+                "station_id": station_id,
+                "row_count": row_count,
+                "columns": json.dumps(col_list),
+                "is_empty": is_empty,
+            },
+        )
 
 
 def save_weather_to_postgres(year, month, db_uri):
@@ -49,11 +56,7 @@ def save_weather_to_postgres(year, month, db_uri):
         print(f"❌ Failed to fetch weather data: {e}")
         return
 
-    for category, df in {
-        "temp": df_temp,
-        "rain": df_rain,
-        "snow": df_snow
-    }.items():
+    for category, df in {"temp": df_temp, "rain": df_rain, "snow": df_snow}.items():
         table_name = f"weather_{category}_{table_suffix}"
 
         if inspector.has_table(table_name):
@@ -83,16 +86,22 @@ def update_weather_views(db_uri):
     with engine.connect() as conn:
         for category in ["temp", "rain", "snow"]:
             table_prefix = f"weather_{category}_"
-            result = conn.execute(text(f"""
+            result = conn.execute(
+                text(
+                    f"""
                 SELECT tablename FROM pg_tables 
                 WHERE tablename LIKE '{table_prefix}%'
                 ORDER BY tablename;
-            """))
+            """
+                )
+            )
             tables = [row[0] for row in result]
             if not tables:
                 continue
 
-            union_sql = "\nUNION ALL\n".join([f"SELECT * FROM {table}" for table in tables])
+            union_sql = "\nUNION ALL\n".join(
+                [f"SELECT * FROM {table}" for table in tables]
+            )
             view_sql = f"CREATE OR REPLACE VIEW weather_{category}_all AS\n{union_sql};"
             conn.execute(text(view_sql))
             print(f"✅ Created view: weather_{category}_all")

@@ -212,6 +212,16 @@ def make_tags(user_id, username):
     return jsonify({"status": "success", "tags": unique_tags})
 
 
+def top5_nouns(text):
+    tagger = MeCab()
+    nouns = [
+        w.split("\t")[0]
+        for w in tagger.parse(text).splitlines()[:-1]
+        if "\t" in w and w.split("\t")[1].split(",")[0] in ("NNG", "NNP")
+    ]
+    return Counter(nouns).most_common(5)
+
+
 @app.route("/upload", methods=["POST"])
 @token_required
 def upload(user_id, username):
@@ -319,21 +329,28 @@ def search(user_id, username):
 
     # 최종 쿼리 조립
     query = f"""
-        SELECT file_path, uuid
+        SELECT file_path, uuid, description
         FROM uploaded_file
         {where_clause}
         {order_by}
     """
 
+    related_word = []
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
+        all_description_text = ""
+        for row in rows:
+            all_description_text += row[2]
+            all_description_text += " "
+        related_word_set_list = top5_nouns(all_description_text)
+        related_word = [word for word, _ in related_word_set_list]
         results = [
             {"file_name": row[0].replace(f"_{row[1]}", ""), "real_path": row[0]}
             for row in rows
         ]
 
-    return jsonify({"results": results})
+    return jsonify({"results": results, "related_word": related_word})
 
 
 @app.route("/download", methods=["GET"])

@@ -7,9 +7,9 @@ from utils.secrets import load_secret
 
 KMA_API_KEY = load_secret("kma_api_key")
 
-BASE_URL_TEMP = 'https://apihub.kma.go.kr/api/typ01/url/sts_ta.php?'  # 기온
-BASE_URL_RAIN = 'https://apihub.kma.go.kr/api/typ01/url/sts_rn.php?'  # 강수
-BASE_URL_SNOW = 'https://apihub.kma.go.kr/api/typ01/url/sts_sd.php?'  # 적설
+BASE_URL_TEMP = "https://apihub.kma.go.kr/api/typ01/url/sts_ta.php?"  # 기온
+BASE_URL_RAIN = "https://apihub.kma.go.kr/api/typ01/url/sts_rn.php?"  # 강수
+BASE_URL_SNOW = "https://apihub.kma.go.kr/api/typ01/url/sts_sd.php?"  # 적설
 
 
 # 해당 년월의 마지막 날(28, 30, 31)
@@ -33,7 +33,9 @@ def fetch_weather_df(year, month):
             print(f"⚠️ Empty response from: {url}")
             return pd.DataFrame(columns=headers)
 
-        df = pd.read_csv(io.StringIO(response.text), sep='\s+', names=headers, skiprows=1, dtype=str)
+        df = pd.read_csv(
+            io.StringIO(response.text), sep="\s+", names=headers, skiprows=1, dtype=str
+        )
 
         if df.empty or len(df.columns) != len(headers):
             print(f"⚠️ Malformed or empty data from: {url}")
@@ -45,26 +47,59 @@ def fetch_weather_df(year, month):
     # 기온 데이터
     df_temp = fetch_df(
         f"{BASE_URL_TEMP}&tm1={start_date}&tm2={end_date}&stn_id={stn_id}&disp={disp}&help={help}&authKey={authKey}",
-        ['YMD', 'STN_ID', 'LAT', 'LON', 'ALTD',
-         'TA_DAVG', 'TMX_DD', 'TMX_OCUR_TMA',
-         'TMN_DD', 'TMN_OCUR_TMA', 'MRNG_TMN', 'MRNG_TMN_OCUR_TMA',
-         'DYTM_TMX', 'DYTM_TMX_OCUR_TMA', 'NGHT_TMN', 'NGHT_TMN_OCUR_TMA']
+        [
+            "YMD",
+            "STN_ID",
+            "LAT",
+            "LON",
+            "ALTD",
+            "TA_DAVG",
+            "TMX_DD",
+            "TMX_OCUR_TMA",
+            "TMN_DD",
+            "TMN_OCUR_TMA",
+            "MRNG_TMN",
+            "MRNG_TMN_OCUR_TMA",
+            "DYTM_TMX",
+            "DYTM_TMX_OCUR_TMA",
+            "NGHT_TMN",
+            "NGHT_TMN_OCUR_TMA",
+        ],
     )
 
     # 강수량 데이터
     df_rain = fetch_df(
         f"{BASE_URL_RAIN}&tm1={start_date}&tm2={end_date}&stn_id={stn_id}&disp={disp}&help={help}&authKey={authKey}",
-        ['YMD', 'STN_ID', 'LAT', 'LON', 'ALTD',
-         'RN_DSUM', 'RN_MAX_1HR', 'RN_MAX_1HR_OCUR_TMA',
-         'RN_MAX_6HR', 'RN_MAX_6HR_OCUR_TMA', 'RN_MAX_10M', 'RN_MAX_10M_OCUR_TMA']
+        [
+            "YMD",
+            "STN_ID",
+            "LAT",
+            "LON",
+            "ALTD",
+            "RN_DSUM",
+            "RN_MAX_1HR",
+            "RN_MAX_1HR_OCUR_TMA",
+            "RN_MAX_6HR",
+            "RN_MAX_6HR_OCUR_TMA",
+            "RN_MAX_10M",
+            "RN_MAX_10M_OCUR_TMA",
+        ],
     )
 
     # 적설량 데이터
     df_snow = fetch_df(
         f"{BASE_URL_SNOW}&tm1={start_date}&tm2={end_date}&stn_id={stn_id}&disp={disp}&help={help}&authKey={authKey}",
-        ['TMA', 'STN_ID', 'LAT', 'LON', 'ALTD',
-         'FSD_DMAX', 'FSD_DMAX_OCUR_TMA', 'SD_DMAX', 'SD_DMAX_OCUR_TMA']
+        [
+            "TMA",
+            "STN_ID",
+            "LAT",
+            "LON",
+            "ALTD",
+            "FSD_DMAX",
+            "FSD_DMAX_OCUR_TMA",
+            "SD_DMAX",
+            "SD_DMAX_OCUR_TMA",
+        ],
     )
 
     return df_temp, df_rain, df_snow
-
