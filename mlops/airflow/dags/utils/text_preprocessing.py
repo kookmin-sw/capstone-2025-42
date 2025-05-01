@@ -1,7 +1,6 @@
 import xml.etree.ElementTree as ET
 import docx
 import fitz  # PyMuPDF: PDF 텍스트 추출용
-import logging
 import magic
 import zipfile
 from pptx import Presentation
@@ -9,22 +8,20 @@ import olefile
 import subprocess
 import re
 import os
-import datetime
+from datetime import datetime, timedelta
+import struct, zlib, pathlib
 from pathlib import Path
 import PyPDF2
 
 
-logging.basicConfig(level=logging.INFO)
-
-
 def to_iso_str(dt):
     """datetime 또는 문자열을 ISO 8601 문자열로 변환"""
-    if isinstance(dt, datetime.datetime):
+    if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%dT%H:%M:%S")
     elif isinstance(dt, str):
         dt = dt.replace("D:", "").strip()
         try:
-            parsed = datetime.datetime.strptime(dt[:14], "%Y%m%d%H%M%S")
+            parsed = datetime.strptime(dt[:14], "%Y%m%d%H%M%S")
             return parsed.strftime("%Y-%m-%dT%H:%M:%S")
         except:
             return ""
@@ -38,22 +35,25 @@ def get_ole_created_date(path):
         ole = olefile.OleFileIO(path)
         if ole.exists("\x05SummaryInformation"):
             props = ole.getproperties("\x05SummaryInformation")
-            created = props.get(12)  # PIDSI_CREATE_DTM
-            return to_iso_str(created)
+            created = props.get(13)
+            if isinstance(created, (int, float)):
+                created = datetime(1601, 1, 1) + timedelta(seconds=created)
+                return to_iso_str(created)
+            else:
+                return created
     except:
-        pass
+        return ""
     return ""
 
 
 def get_office_openxml_created_date(path):
     try:
         with zipfile.ZipFile(path, "r") as z:
-            core_xml = z.read("docProps/core.xml")
+            core_xml = z.read("docProps/core.xml").decode("utf-8", "ignore")
             root = ET.fromstring(core_xml)
-            ns = {"dcterms": "http://purl.org/dc/terms"}
-            created = root.find("dcterms:created", ns)
-            if created is not None:
-                return to_iso_str(created.text)
+            for t_elem in root.iter("{http://purl.org/dc/terms/}modified"):
+                if t_elem.text is not None:
+                    return t_elem.text.replace("Z", "")
     except:
         return ""
     return ""
@@ -63,12 +63,12 @@ def get_hwpx_created_date(path):
     try:
         with zipfile.ZipFile(path, "r") as z:
             for name in z.namelist():
-                if "FileHeader.xml" in name:
-                    content = z.read(name)
-                    tree = ET.fromstring(content)
-                    for elem in tree.iter():
-                        if "dateCreated" in elem.attrib:
-                            return to_iso_str(elem.attrib["dateCreated"])
+                if "FileHeader.xml" in name or "Contents/content.hpf" in name:
+                    content = z.read(name).decode("utf-8", "ignore")
+                    root = ET.fromstring(content)
+                    for t_elem in root.iter("{http://www.idpf.org/2007/opf/}meta"):
+                        if "ModifiedDate" in t_elem.attrib["name"]:
+                            return t_elem.text.replace("Z", "")
     except:
         pass
     return ""
@@ -87,81 +87,66 @@ def get_pdf_created_date(path):
 def get_file_ctime_created_date(path):
     try:
         ts = os.path.getctime(path)
-        return to_iso_str(datetime.datetime.fromtimestamp(ts))
+        return to_iso_str(datetime.fromtimestamp(ts))
     except:
         return ""
 
 
-def extract_ppt(filepath):
-    if not olefile.isOleFile(filepath):
-        return ""
-
-    ole = olefile.OleFileIO(filepath)
-    if not ole.exists("PowerPoint Document"):
-        return ""
+def extract_ppt_doc(filepath):
+    from org.apache.poi.sl.extractor import SlideShowExtractor
+    from org.apache.poi.extractor import ExtractorFactory
+    from java.io import FileInputStream
 
     try:
-        with ole.openstream("PowerPoint Document") as stream:
-            data = stream.read()
-
-            # 한글/영문 UTF-16LE만 추출
-            matches = re.findall(
-                rb"((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})", data
-            )
-
-            results = []
-            for m in matches:
-                try:
-                    decoded = m.decode("utf-16le").strip()
-                    results.append(decoded)
-                except:
-                    continue
-
-            return "\n".join(results)
-
-    except Exception as e:
-        return f"[Error] {e}"
-
-
-def extract_doc(filepath):
-    try:
-        output = subprocess.check_output(["antiword", filepath], text=True)
-        return output
-    except:
+        with FileInputStream(filepath) as stream:
+            extractor = ExtractorFactory.createExtractor(stream)  # 형식 자동 감지
+            if isinstance(extractor, SlideShowExtractor):
+                extractor.setSlidesByDefault(True)
+                extractor.setNotesByDefault(True)
+            ans = extractor.getText()[:None]
+            ans = ans.replace("\n", " ")
+        return ans
+    except RuntimeError as e:
         return ""
     return ""
 
 
 def extract_hwp(filepath):
-    if not olefile.isOleFile(filepath):
-        return ""
+    filepath = pathlib.Path(filepath).expanduser()
+    with filepath.open("rb") as f:
+        magic = f.read(4)
+        f.seek(0)
+        if magic == b"HWP ":
+            header = f.read(256)
+            body_off = struct.unpack_from("<I", header, 36)[0]
+            f.seek(body_off)
+            body = zlib.decompress(f.read())
 
-    ole = olefile.OleFileIO(filepath)
-    text = ""
+            pos, out = 0, []
+            while pos < len(body):
+                (head,) = struct.unpack_from("<I", body, pos)
+                pos += 4
+                tag, size = head & 0x3FF, (head >> 20) & 0xFFF
+                if size == 0xFFF:
+                    (size,) = struct.unpack_from("<I", body, pos)
+                    pos += 4
+                data = body[pos : pos + size]
+                pos += size
+                if tag == 67:  # PARA_TEXT
+                    try:
+                        out.append(data.decode("utf-16le").rstrip("\x00"))
+                    except UnicodeDecodeError:
+                        pass
+            txt = "\n".join(out)
+        elif magic.startswith(b"<?xm") or magic.startswith(b"<DOC"):
+            data = f.read().decode("utf-8", "ignore")
+            root = ET.fromstring(data)
+            out = [n.text for n in root.iter("CHAR") if n.text]
+            txt = "\n".join(out)
+        else:
+            txt = ""
 
-    for entry in ole.listdir():
-        name = "/".join(entry)
-        if name.startswith("BodyText"):
-            try:
-                with ole.openstream(name) as stream:
-                    data = stream.read()
-
-                    # 한글/영문 UTF-16LE만 추출
-                    matches = re.findall(
-                        rb"((?:[A-Za-z]\x00|[\x00-\xff][\xac-\xd7]){2,})", data
-                    )
-
-                    results = []
-                    for m in matches:
-                        try:
-                            decoded = m.decode("utf-16le").strip()
-                            results.append(decoded)
-                        except:
-                            continue
-                    return "\n".join(results)
-            except Exception as e:
-                print(f"[⚠️] {name}: {e}")
-    return text
+    return txt
 
 
 # HWPX 문서에서 텍스트 추출
@@ -196,7 +181,6 @@ def extract_docx(path):
                         texts.append(text)
         return " ".join(texts)
     except Exception as e:
-        logging.warning(f"DOCX 처리 중 오류: {e}")
         return ""
 
 
@@ -211,7 +195,6 @@ def extract_pdf(path):
             texts.extend(lines)
         return " ".join(texts)
     except Exception as e:
-        logging.warning(f"PDF 처리 중 오류: {e}")
         return ""
 
 
@@ -236,11 +219,25 @@ def extract_pptx(filepath):
     return flat_line
 
 
+def extract_default(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = f.read()
+        return data
+
+
 # 파일 확장자에 따라 적절한 추출 함수 선택
 def process_text(filepath):
+    import jpype
+
+    if not jpype.isJVMStarted():
+        jar_dir = Path("/maven/target/dependency")
+        jars = [str(p) for p in jar_dir.glob("*.jar")]
+        jpype.startJVM(classpath=jars)
+    import jpype.imports
+
     mime = magic.Magic(mime=True)
     mime_type = mime.from_file(filepath)
-    ext = ""
+    ext = "default"
     if olefile.isOleFile(filepath):
         try:
             ole = olefile.OleFileIO(filepath)
@@ -288,6 +285,23 @@ def process_text(filepath):
                     ext = "pptx"
         except:
             pass
+    elif mime_type == "text/xml":
+        try:
+            hwpfilepath = pathlib.Path(filepath).expanduser()
+            with hwpfilepath.open("rb") as f:
+                xml_bytes = f.read().decode("utf-8", "ignore")
+                root = ET.fromstring(xml_bytes)
+                tag = root.tag.split("}", 1)[-1]  # {namespace}Tag → Tag
+                ns = root.tag.split("}", 1)[0][1:] if "}" in root.tag else ""
+                if (
+                    tag in {"HWPX", "HWPML", "HwpDocuments"}
+                    or "hancom.co.kr/hwpml" in ns.lower()
+                ):
+                    ext = "hwp"
+                else:
+                    pass
+        except ET.ParseError:
+            pass
     try:
         with zipfile.ZipFile(filepath, "r") as zipf:
             names = zipf.namelist()
@@ -303,12 +317,13 @@ def process_text(filepath):
 
     text_extractor = {
         "hwp": extract_hwp,
-        "doc": extract_doc,
-        "ppt": extract_ppt,
+        "doc": extract_ppt_doc,
+        "ppt": extract_ppt_doc,
         "hwpx": extract_hwpx,
         "docx": extract_docx,
         "pptx": extract_pptx,
         "pdf": extract_pdf,
+        "default": extract_default,
     }.get(ext)
 
     meta_extractor = {
@@ -319,6 +334,7 @@ def process_text(filepath):
         "docx": get_office_openxml_created_date,
         "pptx": get_office_openxml_created_date,
         "pdf": get_pdf_created_date,
+        "default": get_file_ctime_created_date,
     }.get(ext)
 
     if text_extractor and meta_extractor:

@@ -15,6 +15,8 @@ services:
     secrets:
       - postgresql_user
       - postgresql_password
+      - postgresql_host
+      - postgresql_database
 
   minio:
     image: minio/minio
@@ -102,6 +104,8 @@ services:
     secrets:
       - postgresql_user
       - postgresql_password
+      - postgresql_host
+      - postgresql_database
 
   webserver:
     build:
@@ -124,6 +128,8 @@ services:
       - minio_root_password
       - postgresql_user
       - postgresql_password
+      - postgresql_host
+      - postgresql_database
       - jwt_secret_key
 
 volumes:

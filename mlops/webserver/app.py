@@ -20,6 +20,7 @@ from urllib.parse import unquote
 from mecab import MeCab
 from flask_cors import CORS
 from functools import wraps
+from collections import Counter
 
 
 app = Flask(__name__)
@@ -43,14 +44,16 @@ minio_client = Minio(
     MINIO_URL, access_key=MINIO_USER, secret_key=MINIO_PASSWORD, secure=False
 )
 
+POSTGRESQL_HOST = load_secret("postgresql_host")
+POSTGRESQL_DATABASE = load_secret("postgresql_database")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 SLEEP_SECONDS = 2
 for i in range(60):
     try:
         conn = psycopg2.connect(
-            host="postgres",
-            database="airflow",
+            host=POSTGRESQL_HOST,
+            database=POSTGRESQL_DATABASE,
             user=POSTGRESQL_USER,
             password=POSTGRESQL_PASSWORD,
         )
@@ -214,11 +217,8 @@ def make_tags(user_id, username):
 
 def top5_nouns(text):
     tagger = MeCab()
-    nouns = [
-        w.split("\t")[0]
-        for w in tagger.parse(text).splitlines()[:-1]
-        if "\t" in w and w.split("\t")[1].split(",")[0] in ("NNG", "NNP")
-    ]
+    morphs = tagger.parse(text)
+    nouns = [m.surface for m in morphs if m.feature.pos in ("NNG", "NNP")]
     return Counter(nouns).most_common(5)
 
 
@@ -341,8 +341,9 @@ def search(user_id, username):
         rows = cur.fetchall()
         all_description_text = ""
         for row in rows:
-            all_description_text += row[2]
-            all_description_text += " "
+            if row[2] is not None:
+                all_description_text += row[2]
+                all_description_text += " "
         related_word_set_list = top5_nouns(all_description_text)
         related_word = [word for word, _ in related_word_set_list]
         results = [

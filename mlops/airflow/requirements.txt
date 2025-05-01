@@ -20,3 +20,4 @@ PyPDF2
 pandas
 requests
 psycopg2-binary
+JPype1

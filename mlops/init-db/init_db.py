@@ -11,14 +11,16 @@ def load_secret(name, default=""):
     return os.getenv(name.upper(), default)
 
 
+POSTGRESQL_HOST = load_secret("postgresql_host")
+POSTGRESQL_DATABASE = load_secret("postgresql_database")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 SLEEP_SECONDS = 2
 for i in range(60):
     try:
         conn = psycopg2.connect(
-            host="postgres",
-            database="airflow",
+            host=POSTGRESQL_HOST,
+            database=POSTGRESQL_DATABASE,
             user=POSTGRESQL_USER,
             password=POSTGRESQL_PASSWORD,
         )
