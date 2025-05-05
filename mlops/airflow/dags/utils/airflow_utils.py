@@ -29,9 +29,16 @@ def make_json_meta_file(data, meta, file_type):
 
 
 def is_doc_ppt_hwp(filepath):
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            head = f.read(2048).lower()
+            if "<?xml" in head and ("<hwpml" in head or "<hwp>" in head):
+                return True
+    except:
+        pass
+
     if not olefile.isOleFile(filepath):
         return False
-
     try:
         with olefile.OleFileIO(filepath) as ole:
             streams = ole.listdir()
@@ -126,4 +133,4 @@ def get_file_type_by_magic(filepath):
     elif is_doc_ppt_hwp(filepath):
         return "text"
     else:
-        return f"unknown ({mime_type})"
+        return "text"

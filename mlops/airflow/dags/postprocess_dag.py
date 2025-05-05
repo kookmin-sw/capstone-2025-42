@@ -5,6 +5,8 @@ import json, os
 import psycopg2
 from utils.secrets import load_secret
 
+POSTGRESQL_HOST = load_secret("postgresql_host")
+POSTGRESQL_DATABASE = load_secret("postgresql_database")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 
@@ -20,8 +22,8 @@ def save_to_db(**context):
     final_text = data["text"]
 
     conn = psycopg2.connect(
-        host="postgres",
-        database="airflow",
+        host=POSTGRESQL_HOST,
+        database=POSTGRESQL_DATABASE,
         user=POSTGRESQL_USER,
         password=POSTGRESQL_PASSWORD,
     )

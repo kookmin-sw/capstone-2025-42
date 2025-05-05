@@ -20,6 +20,7 @@ from urllib.parse import unquote
 from mecab import MeCab
 from flask_cors import CORS
 from functools import wraps
+from collections import Counter
 
 
 app = Flask(__name__)
@@ -43,14 +44,16 @@ minio_client = Minio(
     MINIO_URL, access_key=MINIO_USER, secret_key=MINIO_PASSWORD, secure=False
 )
 
+POSTGRESQL_HOST = load_secret("postgresql_host")
+POSTGRESQL_DATABASE = load_secret("postgresql_database")
 POSTGRESQL_USER = load_secret("postgresql_user")
 POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 SLEEP_SECONDS = 2
 for i in range(60):
     try:
         conn = psycopg2.connect(
-            host="postgres",
-            database="airflow",
+            host=POSTGRESQL_HOST,
+            database=POSTGRESQL_DATABASE,
             user=POSTGRESQL_USER,
             password=POSTGRESQL_PASSWORD,
         )
@@ -212,6 +215,13 @@ def make_tags(user_id, username):
     return jsonify({"status": "success", "tags": unique_tags})
 
 
+def top5_nouns(text):
+    tagger = MeCab()
+    morphs = tagger.parse(text)
+    nouns = [m.surface for m in morphs if m.feature.pos in ("NNG", "NNP")]
+    return Counter(nouns).most_common(5)
+
+
 @app.route("/upload", methods=["POST"])
 @token_required
 def upload(user_id, username):
@@ -319,21 +329,29 @@ def search(user_id, username):
 
     # 최종 쿼리 조립
     query = f"""
-        SELECT file_path, uuid
+        SELECT file_path, uuid, description
         FROM uploaded_file
         {where_clause}
         {order_by}
     """
 
+    related_word = []
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
+        all_description_text = ""
+        for row in rows:
+            if row[2] is not None:
+                all_description_text += row[2]
+                all_description_text += " "
+        related_word_set_list = top5_nouns(all_description_text)
+        related_word = [word for word, _ in related_word_set_list]
         results = [
             {"file_name": row[0].replace(f"_{row[1]}", ""), "real_path": row[0]}
             for row in rows
         ]
 
-    return jsonify({"results": results})
+    return jsonify({"results": results, "related_word": related_word})
 
 
 @app.route("/download", methods=["GET"])
