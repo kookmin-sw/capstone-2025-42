@@ -44,5 +44,5 @@ mlops 폴더에 들어가
 docker-compose up -d --build
 ```
 를 수행합니다.
-그 후, localhost:8792에 들어가 로그인 후 업로드 및 다운로드를 수행 할 수 있습니다.<br>
+그 후, localhost:8792에 들어가 로그인 후 파일 업로드 및 다운로드를 수행 할 수 있습니다.<br>
 단, 이때 localhost:8080에 들어가 먼저 airflow가 켜졌는지와, 모든 dag가 정상적으로 등록되었는지 확인이 필요합니다.
