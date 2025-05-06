@@ -27,9 +27,9 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
         conn.execute(
             text(
                 """
-            INSERT INTO weather_meta 
-            (table_name, category, year, month, station_id, row_count, columns, is_empty)
-            VALUES (:table_name, :category, :year, :month, :station_id, :row_count, :columns, :is_empty)
+            INSERT INTO numerical_meta 
+            (table_name, category, year, month, source, row_count, columns, is_empty)
+            VALUES (:table_name, :category, :year, :month, :source, :row_count, :columns, :is_empty)
         """
             ),
             {
@@ -37,10 +37,10 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 "category": category,
                 "year": year,
                 "month": month,
-                "station_id": station_id,
+                "source": "KMA",  # 또는 적절한 출처 입력
                 "row_count": row_count,
                 "columns": json.dumps(col_list),
-                "is_empty": is_empty,
+                "is_empty": is_empty
             },
         )
 

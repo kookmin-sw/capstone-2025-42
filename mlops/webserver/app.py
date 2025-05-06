@@ -5,11 +5,13 @@ from flask import (
     send_file,
     render_template,
     after_this_request,
+    send_from_directory,
     make_response,
 )
 from minio import Minio
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
+import pandas as pd
 import jwt
 from uuid import uuid4
 import json
@@ -21,9 +23,10 @@ from mecab import MeCab
 from flask_cors import CORS
 from functools import wraps
 from collections import Counter
+from sqlalchemy import create_engine, text
 
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist", static_url_path="")
 CORS(app)
 
 
@@ -65,19 +68,17 @@ for i in range(60):
 else:
     raise Exception("PostgreSQL 연결 실패: DB가 안 떠 있음")
 
+DB_URI = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@postgres:5432/airflow"
+engine = create_engine(DB_URI)
 
-@app.route("/", methods=["GET"])
-def index():
-    token = request.cookies.get("token")
-    if not token:
-        return render_template("login.html")
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
-        return render_template("index.html", username=payload["username"])
-    except jwt.ExpiredSignatureError:
-        return render_template("login.html", message="세션이 만료되었습니다.")
-    except jwt.InvalidTokenError:
-        return render_template("login.html", message="잘못된 토큰입니다.")
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
 
 
 def token_required(f):
@@ -279,113 +280,274 @@ def upload(user_id, username):
 
 
 @app.route("/search", methods=["GET"])
-@token_required
-def search(user_id, username):
-    keyword_string = request.args.get("word", "")
-    order_string = request.args.get("order", "")
-    date_string = request.args.get("date", "all")  # all, today, week
-    exp_string = request.args.get("exp", "")  # text, video, ...
+def search():
+    keyword = request.args.get("word", "")
+    order = request.args.get("order", "name")
+    date_filter = request.args.get("date", "all")
+    exp = request.args.get("exp", "")
 
-    keywords = keyword_string.split()
-    result = None
-
-    # 정렬 기준
-    if order_string == "name":
-        order_by = "ORDER BY file_name ASC"
-    elif order_string == "recent":
-        order_by = "ORDER BY uploaded_at DESC"
-    else:
-        order_by = "ORDER BY file_name ASC"
-
-    # 조건 모음
     conditions = []
     params = []
 
-    # 키워드 검색
-    for kw in keywords:
-        pattern = f"%{kw}%"
+    for kw in keyword.split():
         conditions.append("(file_name ILIKE %s OR COALESCE(description, '') ILIKE %s)")
-        params.extend([pattern, pattern])
+        params.extend([f"%{kw}%", f"%{kw}%"])
 
-    # 날짜 필터링
-    if date_string == "today":
-        today = datetime.utcnow().date()
+    if date_filter == "today":
         conditions.append("DATE(uploaded_at) = %s")
-        params.append(today)
-    elif date_string == "week":
-        week_ago = datetime.utcnow().date() - timedelta(days=7)
+        params.append(datetime.utcnow().date())
+    elif date_filter == "week":
         conditions.append("DATE(uploaded_at) >= %s")
-        params.append(week_ago)
+        params.append(datetime.utcnow().date() - timedelta(days=7))
 
-    # 확장자/파일타입 필터링
-    if exp_string and exp_string != "all":
+    if exp and exp != "all":
         conditions.append("file_type = %s")
-        params.append(exp_string)
+        params.append(exp)
 
-    # WHERE 절 조립
-    where_clause = ""
-    if conditions:
-        where_clause = " WHERE " + " AND ".join(conditions)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    order_sql = "uploaded_at DESC" if order == "recent" else "file_name ASC"
 
-    # 최종 쿼리 조립
-    query = f"""
-        SELECT file_path, uuid, description
-        FROM uploaded_file
-        {where_clause}
-        {order_by}
-    """
-
-    related_word = []
     with conn.cursor() as cur:
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        all_description_text = ""
-        for row in rows:
-            if row[2] is not None:
-                all_description_text += row[2]
-                all_description_text += " "
-        related_word_set_list = top5_nouns(all_description_text)
-        related_word = [word for word, _ in related_word_set_list]
+        cur.execute(f"""
+            SELECT file_path, uuid
+            FROM uploaded_file
+            {where}
+            ORDER BY {order_sql}
+        """, params)
         results = [
             {"file_name": row[0].replace(f"_{row[1]}", ""), "real_path": row[0]}
-            for row in rows
+            for row in cur.fetchall()
         ]
 
-    return jsonify({"results": results, "related_word": related_word})
+    return jsonify({"results": results})
+
+
+@app.route("/search_numerical", methods=["GET"])
+def search_numerical():
+    word = request.args.get("word", "")
+    category = request.args.get("category")
+    year = request.args.get("year")
+    month = request.args.get("month")
+
+    conditions = []
+    params = {}
+
+    if word:
+        conditions.append("(table_name ILIKE :kw OR category ILIKE :kw)")
+        params["kw"] = f"%{word}%"
+    if category:
+        conditions.append("category = :category")
+        params["category"] = category
+    if year:
+        conditions.append("year = :year")
+        params["year"] = int(year)
+    if month:
+        conditions.append("month = :month")
+        params["month"] = int(month)
+
+    where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    query = f"""
+        SELECT table_name, category, year, month, is_empty
+        FROM numerical_meta
+        {where_sql}
+        ORDER BY year DESC, month DESC
+    """
+
+    with engine.connect() as con:
+        result = con.execute(text(query), params).mappings()
+        rows = [
+            {
+                "table_name": row["table_name"],
+                "category": row["category"],
+                "year": row["year"],
+                "month": row["month"],
+                "is_empty": row["is_empty"],
+            }
+            for row in result
+        ]
+
+    return jsonify({"results": rows})
+
+
+@app.route("/preview_numerical", methods=["GET"])
+def preview_numerical():
+    table_name = request.args.get("table_name")
+    if not table_name:
+        return {"error": "Missing table_name"}, 400
+
+    query = f'SELECT * FROM "{table_name}" LIMIT 5'
+    df = pd.read_sql(query, engine)
+    return jsonify({
+        "columns": list(df.columns),
+        "preview": df.to_dict(orient="records")
+    })
+
+
+@app.route("/download_numerical", methods=["GET"])
+def download_numerical():
+    table_name = request.args.get("table_name")
+    columns = request.args.get("columns")  # "col1,col2"
+
+    if not table_name:
+        return {"error": "Missing table_name"}, 400
+
+    if columns:
+        quoted_columns = ', '.join([f'"{col.strip()}"' for col in columns.split(',')])
+        col_clause = f"{quoted_columns}"
+    else:
+        col_clause = "*"
+
+    query = f'SELECT {col_clause} FROM "{table_name}"'
+    df = pd.read_sql(query, engine)
+
+    path = f"/tmp/{table_name}_all.csv"
+    df.to_csv(path, index=False)
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(path)
+        except:
+            pass
+        return response
+
+    return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
+
+
+@app.route("/download_numerical_filtered", methods=["GET"])
+def download_numerical_filtered():
+    table_name = request.args.get("table_name")
+    columns = request.args.get("columns")  # "col1,col2"
+    sort = request.args.get("sort")  # "col1:asc,col2:desc"
+
+    if not table_name:
+        return {"error": "Missing table_name"}, 400
+
+    col_clause = "*"
+    if columns:
+        col_clause = ", ".join([f'"{col.strip()}"' for col in columns.split(",")])
+
+    order_clause = ""
+    if sort:
+        try:
+            sort_items = []
+            for s in sort.split(","):
+                col, dir = s.split(":")
+                if dir.lower() in ["asc", "desc"]:
+                    sort_items.append(f'"{col.strip()}" {dir.upper()}')
+            if sort_items:
+                order_clause = " ORDER BY " + ", ".join(sort_items)
+        except:
+            return {"error": "Invalid sort format"}, 400
+
+    query = f'SELECT {col_clause} FROM "{table_name}"{order_clause}'
+    try:
+        df = pd.read_sql(query, engine)
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+    path = f"/tmp/{table_name}_filtered.csv"
+    df.to_csv(path, index=False)
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(path)
+        except:
+            pass
+        return response
+
+    return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
 
 
 @app.route("/download", methods=["GET"])
-@token_required
-def download(user_id, username):
+def download_file():
     file_name = request.args.get("file_name")
-    origin_name = request.args.get("origin_name")
+    origin_name = request.args.get("origin_name") or "file.csv"
 
     if not file_name:
         return {"error": "file_name query param required"}, 400
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT file_path FROM uploaded_file WHERE file_path = %s",
-            (unquote(file_name),),
-        )
-        row = cur.fetchone()
-        if not row:
-            return {"error": "File not found"}, 404
-        file_path = row[0]
-
-    local_path = f"/tmp/{os.path.basename(file_path)}"
-    minio_client.fget_object(BUCKET_NAME, file_path, local_path)
+    local_path = f"/tmp/{os.path.basename(file_name)}"
+    try:
+        minio_client.fget_object(BUCKET_NAME, file_name, local_path)
+    except Exception as e:
+        return {"error": str(e)}, 500
 
     @after_this_request
-    def remove_file(response):
+    def remove_temp_file(response):
         try:
             os.remove(local_path)
-            print(f"Deleted file: {local_path}", flush=True)
-        except Exception as e:
-            print(f"Error deleting file: {e}", flush=True)
+        except:
+            pass
         return response
 
     return send_file(local_path, as_attachment=True, download_name=origin_name)
+
+
+@app.route("/preview_merge_table", methods=["GET"])
+def preview_merge_table():
+    table_name = request.args.get("table_name")
+    if not table_name:
+        return {"error": "Missing table_name"}, 400
+
+    query = f"SELECT * FROM {table_name} LIMIT 5"
+    try:
+        df = pd.read_sql(query, engine)
+        return jsonify({
+            "columns": list(df.columns),
+            "preview": df.to_dict(orient="records")
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/download_merge", methods=["GET"])
+def download_merge():
+    table1 = request.args.get("base")
+    table2 = request.args.get("target")
+    how = request.args.get("join_type", "join")  # join, concat_h, concat_v
+    on = request.args.get("join_key")
+
+    base_cols = request.args.get("base_cols", "").split(",")
+    target_cols = request.args.get("target_cols", "").split(",")
+
+    if not table1 or not table2:
+        return {"error": "base와 target 테이블명이 필요합니다."}, 400
+
+    try:
+        df1 = pd.read_sql(f"SELECT * FROM {table1}", engine)[base_cols]
+        df2 = pd.read_sql(f"SELECT * FROM {table2}", engine)[target_cols]
+    except Exception as e:
+        return {"error": f"테이블 로드 실패: {e}"}, 500
+
+    try:
+        if how == "concat_v":
+            df_merged = pd.concat([df1, df2], axis=0)
+        elif how == "concat_h":
+            df_merged = pd.concat([df1.reset_index(drop=True), df2.reset_index(drop=True)], axis=1)
+        else:
+            if not on:
+                return {"error": "조인 기준 컬럼이 필요합니다."}, 400
+            df_merged = pd.merge(df1, df2, on=on, how="inner")
+    except Exception as e:
+        return {"error": f"병합 실패: {e}"}, 500
+
+    # 파일 저장 및 응답
+    filename = f"{table1}_{table2}_merged.csv"
+    csv_path = os.path.join("/tmp", filename)
+    df_merged.to_csv(csv_path, index=False)
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(csv_path)
+        except:
+            pass
+        return response
+
+    return send_file(csv_path, as_attachment=True, download_name=filename)
 
 
 if __name__ == "__main__":

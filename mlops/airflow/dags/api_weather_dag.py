@@ -31,7 +31,7 @@ with DAG(
 
     def weather_to_psql():
         for year in range(2024, 2025):
-            for month in range(1, 4):
+            for month in range(1, 3):
                 save_weather_to_postgres(year, month, db_uri)
 
     def weather_to_sql():
