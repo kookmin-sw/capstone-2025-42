@@ -1,0 +1,36 @@
+{
+  "name": "test",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "d3": "^7.9.0",
+    "d3-cloud": "^1.2.7",
+    "leaflet": "^1.9.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.5.3",
+    "recharts": "^2.15.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.22.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.1",
+    "vite": "^6.3.1"
+  }
+}
