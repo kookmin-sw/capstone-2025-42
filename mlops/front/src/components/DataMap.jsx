@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// 마커 아이콘 경로를 Vite 환경에 맞게 지정
+// 마커 아이콘 설정 (Vite 환경 대응)
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -15,11 +15,29 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-// 샘플 데이터
+// 정릉/길음 관련 샘플 데이터
 const sampleData = [
-  { id: 1, title: '의정부 전통시장', lat: 37.738, lng: 127.047, summary: '지역 경제 중심지' },
-  { id: 2, title: '양주 문화센터', lat: 37.798, lng: 127.045, summary: '주민 문화 공간' },
-  { id: 3, title: '포천 시립도서관', lat: 37.896, lng: 127.201, summary: '지식 나눔의 중심' },
+  {
+    id: 1,
+    title: '정릉시장',
+    lat: 37.6026,
+    lng: 127.0168,
+    summary: '정릉 주민 생활 중심지',
+  },
+  {
+    id: 2,
+    title: '길음 청소년문화의집',
+    lat: 37.6122,
+    lng: 127.0255,
+    summary: '지역 청소년의 활동 공간',
+  },
+  {
+    id: 3,
+    title: '정릉천 생태 공간',
+    lat: 37.6051,
+    lng: 127.0212,
+    summary: '자연과 함께하는 마을 산책로',
+  },
 ];
 
 export default function DataMap() {
@@ -30,14 +48,14 @@ export default function DataMap() {
   }, []);
 
   if (!isMounted) {
-    return <div className="h-64 text-center pt-6 text-gray-500">지도를 불러오는 중...</div>;
+    return <div className="h-80 text-center pt-6 text-gray-500">지도를 불러오는 중...</div>;
   }
 
   return (
-    <div className="w-full h-64 rounded-lg overflow-hidden">
+    <div className="w-full h-80 rounded-xl shadow-md overflow-hidden">
       <MapContainer
-        center={[37.75, 127.05]}
-        zoom={10}
+        center={[37.6122, 127.0255]} // 길음 중심
+        zoom={14}
         scrollWheelZoom={false}
         style={{ height: '100%', width: '100%' }}
       >
@@ -48,8 +66,8 @@ export default function DataMap() {
         {sampleData.map((point) => (
           <Marker key={point.id} position={[point.lat, point.lng]}>
             <Popup>
-              <strong>{point.title}</strong><br />
-              {point.summary}
+              <div className="text-sm font-semibold text-gray-800 mb-1">{point.title}</div>
+              <div className="text-xs text-gray-600">{point.summary}</div>
             </Popup>
           </Marker>
         ))}

@@ -50,12 +50,12 @@ export default function HomePage() {
           className="bg-white shadow rounded-xl p-6 hover:shadow-lg transition cursor-pointer"
           onClick={() => setModalCard('summary')}
         >
-          <h2 className="text-lg font-semibold mb-2">우리 동네 데이터 요약</h2>
+          <h2 className="text-lg font-semibold mb-2">정릉·길음 데이터 요약</h2>
           <ul className="text-sm text-gray-700 space-y-2">
-            <li>📍 의정부 업로드: <span className="font-bold text-blue-600">320건</span></li>
-            <li>🎥 영상 자료: <span className="font-bold text-red-500">42건</span></li>
-            <li>📄 문서 자료: <span className="font-bold text-gray-600">78건</span></li>
-            <li>🖼️ 이미지 자료: <span className="font-bold text-green-600">200건</span></li>
+            <li>📍 정릉/길음 업로드: <span className="font-bold text-blue-600">274건</span></li>
+            <li>🎥 영상 자료: <span className="font-bold text-red-500">38건</span></li>
+            <li>📄 문서 자료: <span className="font-bold text-gray-600">92건</span></li>
+            <li>🖼️ 이미지 자료: <span className="font-bold text-green-600">144건</span></li>
           </ul>
         </div>
 
@@ -75,13 +75,13 @@ export default function HomePage() {
           <h2 className="text-lg font-semibold mb-2">데이터 스토리</h2>
           <p className="text-sm mb-2">우리가 기록한 이야기들을 확인해보세요.</p>
           <ul className="text-xs text-gray-700 list-disc list-inside space-y-1 mb-3">
-            <li>로컬 데이터의 의미</li>
-            <li>마을 사례 이야기</li>
-            <li>주민 참여 경험</li>
+            <li>정릉 시장 풍경</li>
+            <li>길음동 주민 모임</li>
+            <li>청소년 문화 활동</li>
           </ul>
           <div className="bg-white p-3 rounded-lg text-sm shadow-sm">
-            <p className="text-gray-800 font-semibold truncate">📷 포천 마을회관의 옛 사진 기록</p>
-            <p className="text-gray-500 truncate text-xs mt-1">포천시 주민들이 기증한 자료로 구성된 영상 데이터</p>
+            <p className="text-gray-800 font-semibold truncate">📷 정릉 마을회관 사진 기록</p>
+            <p className="text-gray-500 truncate text-xs mt-1">주민이 제공한 옛 거리 사진들</p>
           </div>
         </div>
       </section>
