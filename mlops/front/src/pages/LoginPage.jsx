@@ -1,28 +1,62 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showSignup, setShowSignup] = useState(false);
-
-  // 회원가입용 상태
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    console.log('✅ 로그인 시도:', { email, password });
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // 쿠키 저장 위해 필요
+        body: JSON.stringify({ username: email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        console.log('✅ 로그인 성공', data);
+        navigate('/'); // 홈으로 이동
+      } else {
+        alert(data.message || '로그인 실패');
+      }
+    } catch (err) {
+      console.error('로그인 요청 오류', err);
+      alert('서버 오류로 로그인에 실패했습니다.');
+    }
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    console.log('✅ 회원가입 시도:', {
-      name: signupName,
-      email: signupEmail,
-      password: signupPassword,
-    });
-    setShowSignup(false); // 모달 닫기
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: signupEmail, password: signupPassword }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert('회원가입 성공');
+        setShowSignup(false);
+      } else {
+        alert(data.message || '회원가입 실패');
+      }
+    } catch (err) {
+      console.error('회원가입 요청 오류', err);
+      alert('서버 오류로 회원가입에 실패했습니다.');
+    }
   };
 
   return (
