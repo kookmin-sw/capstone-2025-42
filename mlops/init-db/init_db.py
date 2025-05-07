@@ -74,16 +74,14 @@ CREATE TABLE IF NOT EXISTS file_tags (
 );
 """
 
-# 날씨 메타 데이터
-create_weather_meta_sql = """
-CREATE TABLE IF NOT EXISTS weather_meta (
-    weather_id SERIAL PRIMARY KEY,
+create_numerical_meta_sql = """
+CREATE TABLE IF NOT EXISTS numerical_meta (
+    numerical_id SERIAL PRIMARY KEY,
     table_name TEXT NOT NULL,
-    category TEXT CHECK (category IN ('temp', 'rain', 'snow')),
-    year INTEGER NOT NULL,
-    month INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    year INTEGER,
+    month INTEGER,
     source TEXT DEFAULT 'KMA',
-    station_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     row_count INTEGER,
     columns TEXT,
@@ -104,8 +102,8 @@ try:
     cur.execute(create_file_tags_sql)
     print("✅ 'file_tags' 테이블 생성 완료")
 
-    cur.execute(create_weather_meta_sql)
-    print("✅ 'weather_table_meta' 테이블 생성 완료")
+    cur.execute(create_numerical_meta_sql)
+    print("✅ 'numerical_meta_table' 테이블 생성 완료")
 
     conn.commit()
 

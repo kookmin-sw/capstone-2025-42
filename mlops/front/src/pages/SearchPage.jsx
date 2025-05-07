@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { regionData } from '../data/regionData'; // ← 파일 위치에 맞게 경로 수정
+import { regionData } from '../data/regionData'; // 존재 시 사용
+import NumericalDownloads from './NumericalDownloads.jsx';
+import MergeTablesModal from './MergeTablesModal.jsx';
 
 const categories = [
   { name: '건강', icon: '🩺', count: 13 },
@@ -11,26 +13,20 @@ const categories = [
   { name: '기타', icon: '➕', count: 16 },
 ];
 
-const categoryDataMap = {
-  건강: [
-    { id: 1, title: '치과기공소 위치 정보', summary: '전국 치과기공소 위치 및 운영 정보', region: '서울특별시', district: '강남구', date: '2024-02-01', type: '문서', fileUrl: '#' },
-    { id: 2, title: '병원 영상 데이터', summary: '의료 홍보 영상 아카이브', region: '경기도', district: '수원시', date: '2023-10-18', type: '영상', fileUrl: '#' },
-  ],
-  동물: [
-    { id: 3, title: '유기동물 보호소 목록', summary: '전국 보호소 위치와 보호 현황', region: '부산광역시', district: '해운대구', date: '2023-05-10', type: '문서', fileUrl: '#' },
-  ],
-};
-
-const dataTypes = ['전체', '문서', '영상', '이미지'];
-const sortOptions = ['제목순', '최신순', '지역순'];
+const dataTypes = ['전체', '문서', '영상', '이미지', '엑셀'];
+const sortOptions = ['제목순', '최신순'];
 
 export default function SearchPage() {
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('시도(전체)');
-  const [selectedDistrict, setSelectedDistrict] = useState('시군구(전체)');
   const [selectedDataType, setSelectedDataType] = useState('전체');
   const [selectedSort, setSelectedSort] = useState('최신순');
+  const [selectedRegion, setSelectedRegion] = useState('시도(전체)');
+  const [selectedDistrict, setSelectedDistrict] = useState('시군구(전체)');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [filteredData, setFilteredData] = useState([]);
+  const [relatedWords, setRelatedWords] = useState([]);
+  const [selectedNumerical, setSelectedNumerical] = useState(null);
+  const [mergeTable, setMergeTable] = useState(null);
 
   const handleRegionChange = (e) => {
     const newRegion = e.target.value;
@@ -38,59 +34,79 @@ export default function SearchPage() {
     setSelectedDistrict('시군구(전체)');
   };
 
-  const getFilteredData = () => {
-    if (!selectedCategory) return [];
+  const handleSearch = async () => {
+    const query = new URLSearchParams({
+      word: searchKeyword,
+      order: selectedSort === '최신순' ? 'recent' : 'name',
+      date: 'all',
+      exp: selectedDataType === '전체' ? 'all' : selectedDataType,
+    }).toString();
 
-    let data = categoryDataMap[selectedCategory] || [];
+    try {
+      const [fileRes, numericalRes] = await Promise.all([
+        fetch(`/search?${query}`, {
+          method: 'GET',
+          credentials: 'include',
+        }),
+          fetch(`/search_numerical?word=${encodeURIComponent(searchKeyword)}`, {
+          method: 'GET',
+        }),
+      ]);
 
-    if (searchKeyword) {
-      data = data.filter(item =>
-        item.title.includes(searchKeyword) || item.summary.includes(searchKeyword)
-      );
+      const fileData = await fileRes.json();
+      const numericalData = await numericalRes.json();
+
+      const fileResults = (fileData.results || []).map((item, i) => ({
+        id: `file-${i}`,
+        type: 'file',
+        title: item.file_name,
+        summary: item.real_path,
+        region: '-',   // 미지원
+        district: '-', // 미지원
+        date: '-',     // 미지원
+        fileUrl: `/download?file_name=${encodeURIComponent(item.real_path)}&origin_name=${encodeURIComponent(item.file_name)}`,
+      }));
+
+      const numericalResults = (numericalData.results || []).map((item, i) => ({
+        id: `num-${i}`,
+        type: 'numerical',
+        title: item.table_name,
+        summary: `${item.year}년 ${item.month}월 ${item.category}`,
+        region: '-',   // 미지원
+        district: '-', // 미지원
+        date: '-',     // 미지원
+        fileUrl: `/download_numerical?table_name=${encodeURIComponent(item.table_name)}`, // 추후 구현 필요
+      }));
+
+      setFilteredData([...fileResults, ...numericalResults]);
+      setRelatedWords(fileData.related_word || []);
+    } catch (err) {
+      console.error('검색 실패:', err);
+      setFilteredData([]);
     }
-
-    if (selectedRegion !== '시도(전체)') {
-      data = data.filter(item => item.region === selectedRegion);
-    }
-
-    if (selectedDistrict !== '시군구(전체)') {
-      data = data.filter(item => item.district === selectedDistrict);
-    }
-
-    if (selectedDataType !== '전체') {
-      data = data.filter(item => item.type === selectedDataType);
-    }
-
-    if (selectedSort === '제목순') {
-      data = data.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (selectedSort === '최신순') {
-      data = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-    } else if (selectedSort === '지역순') {
-      data = data.sort((a, b) => {
-        const regionCompare = a.region.localeCompare(b.region);
-        return regionCompare !== 0
-          ? regionCompare
-          : a.district.localeCompare(b.district);
-      });
-    }
-
-    return data;
   };
 
   const handleDetail = (item) => {
-    alert(`상세 페이지 이동: ${item.title}`);
+    if (item.type === 'numerical') {
+      setMergeTable({ table_name: item.title }); // 머지 팝업 호출
+    } else {
+    alert(`상세 보기 기능은 수치 데이터에만 지원됩니다.`);
+    }
   };
 
   const handleDownload = (item) => {
-    window.open(item.fileUrl, '_blank');
+    if (item.type === 'numerical') {
+      setSelectedNumerical(item.title); // table_name 전달
+    } else {
+      window.open(item.fileUrl, '_blank');
+    }
   };
-
-  const filteredData = getFilteredData();
 
   return (
     <div className="bg-white min-h-screen px-6 py-10">
-      <h1 className="text-3xl font-bold text-gray-800 mb-8">카테고리별 조회</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-8">데이터 검색</h1>
 
+      {/* 카테고리 UI (비활성화된 필터) */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6 mb-10">
         {categories.map((cat) => (
           <div
@@ -107,7 +123,8 @@ export default function SearchPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-10 bg-gray-100 p-4 rounded-lg">
+      {/* 검색 필터 바 */}
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end mb-10 bg-gray-100 p-4 rounded-lg">
         <select value={selectedRegion} onChange={handleRegionChange} className="border rounded p-2">
           {Object.keys(regionData).map((region) => (
             <option key={region} value={region}>{region}</option>
@@ -130,65 +147,77 @@ export default function SearchPage() {
 
         <input
           type="text"
-          placeholder="제목 또는 설명으로 검색"
+          placeholder="파일 이름 또는 설명 검색"
           value={searchKeyword}
           onChange={(e) => setSearchKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSearch();
+          }}
           className="w-full px-4 py-2 border border-gray-300 rounded shadow-sm"
         />
+
+        <button
+          onClick={handleSearch}
+          className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 transition"
+        >
+          검색
+        </button>
       </div>
 
-      {selectedCategory ? (
-        <div className="border-t pt-6">
-          <h2 className="text-xl font-bold text-gray-700 mb-4">
-            {selectedCategory} 관련 데이터 목록
-          </h2>
+      {relatedWords.length > 0 && (
+        <div className="mb-6 text-sm text-gray-500">
+          연관 키워드: {relatedWords.map((w) => <span key={w} className="mr-2 text-blue-600">#{w}</span>)}
+        </div>
+      )}
 
-          {filteredData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border">
-                <thead className="bg-gray-100 text-gray-600">
-                  <tr>
-                    <th className="px-4 py-2 text-left">제목</th>
-                    <th className="px-4 py-2 text-left">설명</th>
-                    <th className="px-4 py-2">지역</th>
-                    <th className="px-4 py-2">유형</th>
-                    <th className="px-4 py-2">업로드일</th>
-                    <th className="px-4 py-2">기능</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredData.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 border-b">
-                      <td className="px-4 py-2 font-medium text-blue-600">{item.title}</td>
-                      <td className="px-4 py-2 text-gray-600">{item.summary}</td>
-                      <td className="text-center">{item.region} {item.district}</td>
-                      <td className="text-center">{item.type}</td>
-                      <td className="text-center">{item.date}</td>
-                      <td className="text-center">
-                        <button
-                          onClick={() => handleDetail(item)}
-                          className="text-xs text-indigo-600 hover:underline mr-2"
-                        >
-                          상세보기
-                        </button>
-                        <button
-                          onClick={() => handleDownload(item)}
-                          className="text-xs text-green-600 hover:underline"
-                        >
-                          다운로드
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
-          )}
+      {filteredData.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border">
+            <thead className="bg-gray-100 text-gray-600">
+              <tr>
+                <th className="px-4 py-2 text-left">제목</th>
+                <th className="px-4 py-2 text-left">파일 경로</th>
+                <th className="px-4 py-2 text-center">기능</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.map((item) => (
+                <tr key={item.id} className="hover:bg-gray-50 border-b">
+                  <td className="px-4 py-2 font-medium text-blue-600">{item.title}</td>
+                  <td className="px-4 py-2 text-gray-600">{item.summary}</td>
+                  <td className="text-center">
+                    <button
+                      onClick={() => handleDetail(item)}
+                      className="text-xs text-indigo-600 hover:underline mr-2"
+                    >
+                      상세보기
+                    </button>
+                    <button
+                      onClick={() => handleDownload(item)}
+                      className="text-xs text-green-600 hover:underline"
+                    >
+                      다운로드
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
-        <p className="text-gray-500 text-sm">카테고리를 선택하면 관련 데이터가 표시됩니다.</p>
+        <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
+      )}
+      {selectedNumerical && (
+        <NumericalDownloads
+            tableName={selectedNumerical}
+            onClose={() => setSelectedNumerical(null)}
+        />
+      )}
+      {mergeTable && (
+        <MergeTablesModal
+          baseTable={mergeTable}
+          onClose={() => setMergeTable(null)}
+        />
       )}
     </div>
   );
