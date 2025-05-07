@@ -1,4 +1,6 @@
-![아이콘3](https://github.com/user-attachments/assets/40961eeb-5564-4649-ad0b-a920d72b6880)
+<img src="https://github.com/user-attachments/assets/362596b9-2faa-466a-bef4-9cd763e2d1bb" width="300" height="300"/>
+
+### Archive ON
 
 ### 1. 프로잭트 소개
 
