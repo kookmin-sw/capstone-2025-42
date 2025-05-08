@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { regionData } from '../data/regionData'; // 존재 시 사용
 import NumericalDownloads from './NumericalDownloads.jsx';
 import MergeTablesModal from './MergeTablesModal.jsx';
+import { useLocation } from 'react-router-dom';
 
 const categories = [
   { name: '건강', icon: '🩺', count: 13 },
@@ -17,7 +18,11 @@ const dataTypes = ['전체', '문서', '영상', '이미지', '엑셀'];
 const sortOptions = ['제목순', '최신순'];
 
 export default function SearchPage() {
-  const [searchKeyword, setSearchKeyword] = useState('');
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const keywordFromURL = params.get('keyword') || '';
+
+  const [searchKeyword, setSearchKeyword] = useState(keywordFromURL);
   const [selectedDataType, setSelectedDataType] = useState('전체');
   const [selectedSort, setSelectedSort] = useState('최신순');
   const [selectedRegion, setSelectedRegion] = useState('시도(전체)');

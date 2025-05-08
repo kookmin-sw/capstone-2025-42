@@ -1,9 +1,10 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const data = [
-  { region: '의정부', count: 20 },
-  { region: '양주', count: 12 },
-  { region: '포천', count: 8 },
+  { region: '정릉3동', count: 120 },
+  { region: '정릉1동', count: 80 },
+  { region: '길음동', count: 100 },
+  { region: '돈암동', count: 60}
 ];
 
 export default function UploadChart() {
