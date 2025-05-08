@@ -1,5 +1,5 @@
 // src/pages/UploadPage.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { typeMap } from "../data/typeMap";
 
 const categories = [
@@ -13,6 +13,8 @@ export default function UploadPage() {
   const [previewMap, setPreviewMap] = useState({});
   const [descriptionMap, setDescriptionMap] = useState({});
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [useUnifiedDescription, setUseUnifiedDescription] = useState(false);
+  const [unifiedDescription, setUnifiedDescription] = useState("");
 
   const fileInputRef = useRef(null);
 
@@ -87,7 +89,10 @@ export default function UploadPage() {
     e.preventDefault();
     if (!files.length || !selectedCategory) return alert("카테고리와 파일을 모두 선택하세요.");
 
-    const missing = files.filter(file => !descriptionMap[file.name]?.trim());
+    const missing = files.filter(file => {
+      const desc = useUnifiedDescription ? unifiedDescription : descriptionMap[file.name];
+      return !desc?.trim();
+    });
     if (missing.length > 0) return alert("모든 파일에 대한 설명을 입력하세요.");
 
     const existing = JSON.parse(localStorage.getItem("uploads") || "[]");
@@ -99,7 +104,7 @@ export default function UploadPage() {
         title: getFileTitle(file.name),
         type,
         category: selectedCategory,
-        description: descriptionMap[file.name],
+        description: useUnifiedDescription ? unifiedDescription : descriptionMap[file.name],
         previewUrl: previewMap[file.name] || "",
       };
       existing.push(newUpload);
@@ -109,6 +114,7 @@ export default function UploadPage() {
     setFiles([]);
     setPreviewMap({});
     setDescriptionMap({});
+    setUnifiedDescription("");
   };
 
   return (
@@ -130,11 +136,16 @@ export default function UploadPage() {
           ))}
         </div>
 
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={useUnifiedDescription} onChange={e => setUseUnifiedDescription(e.target.checked)} />
+          부연 설명 일괄 적용
+        </label>
+
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onClick={handleClickUploadBox}
-          className="mt-6 p-8 border-2 border-dotted rounded-2xl bg-sky-300 text-white text-center cursor-pointer select-none"
+          className="mt-4 p-8 border-2 border-dotted rounded-2xl bg-sky-300 text-white text-center cursor-pointer select-none"
         >
           <div className="text-4xl mb-2">📄</div>
           <p className="text-lg font-semibold">Drop files here</p>
@@ -148,7 +159,35 @@ export default function UploadPage() {
           />
         </div>
 
-        {files.map(file => (
+        {useUnifiedDescription && files.length > 0 && (
+          <>
+            <div className="mt-6 flex flex-wrap gap-4">
+              {files.map(file => (
+                <div key={file.name} className="w-40">
+                  {previewMap[file.name] && (
+                    <img
+                      src={previewMap[file.name]}
+                      alt="미리보기"
+                      className="w-full h-32 object-contain border rounded mb-2"
+                    />
+                  )}
+                  <p className="text-center text-sm truncate">{getFileTitle(file.name)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <textarea
+                value={unifiedDescription}
+                onChange={(e) => setUnifiedDescription(e.target.value)}
+                placeholder="모든 파일에 적용할 설명 입력"
+                className="border p-2 rounded w-full"
+                rows="3"
+              />
+            </div>
+          </>
+        )}
+
+        {!useUnifiedDescription && files.map(file => (
           <div key={file.name} className="mt-6 border rounded-lg p-4 bg-gray-50">
             <p className="font-semibold text-gray-800 mb-2">{getFileTitle(file.name)}</p>
             {previewMap[file.name] && (
