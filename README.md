@@ -1,4 +1,4 @@
-<img src="https://github.com/user-attachments/assets/59a65473-f51c-4e47-980c-e4775787e222" width="900" height="300"/>
+![image](https://github.com/user-attachments/assets/947814c8-2c21-4ed9-97c2-7c9a2d25a2c8)
 
 ### 1. 프로잭트 소개
 
