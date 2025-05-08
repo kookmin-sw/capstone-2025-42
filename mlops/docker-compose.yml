@@ -123,6 +123,7 @@ services:
       - postgres
     volumes:
       - ./webserver:/app
+      - ./front/dist:/app/dist
     secrets:
       - minio_root_user
       - minio_root_password

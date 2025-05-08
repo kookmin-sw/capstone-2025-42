@@ -1,6 +1,4 @@
-<img src="https://github.com/user-attachments/assets/362596b9-2faa-466a-bef4-9cd763e2d1bb" width="300" height="300"/>
-
-### Archive ON
+![image](https://github.com/user-attachments/assets/947814c8-2c21-4ed9-97c2-7c9a2d25a2c8)
 
 ### 1. 프로잭트 소개
 
