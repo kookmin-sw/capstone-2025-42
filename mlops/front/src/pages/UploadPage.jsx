@@ -1,218 +1,195 @@
 // src/pages/UploadPage.jsx
-import { useState, useRef } from "react";
-import { typeMap } from "../data/typeMap";
+import { useState } from 'react';
+import axios from 'axios';
 
-const categories = [
-  { name: '건강', icon: '🩺' }, { name: '동물', icon: '🐐' }, { name: '식품', icon: '🍽️' },
-  { name: '문화', icon: '🎭' }, { name: '생활', icon: '🍳' }, { name: '자원환경', icon: '🌿' },
-  { name: '기타', icon: '➕' },
-];
+const categories = ['건강', '동물', '식품', '문화', '생활', '자원환경', '기타'];
 
 export default function UploadPage() {
-  const [files, setFiles] = useState([]);
-  const [previewMap, setPreviewMap] = useState({});
-  const [descriptionMap, setDescriptionMap] = useState({});
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [useUnifiedDescription, setUseUnifiedDescription] = useState(false);
-  const [unifiedDescription, setUnifiedDescription] = useState("");
+  /* ── state ───────────────────────────── */
+  const [files,     setFiles]     = useState([]);
+  const [fileMetas, setFileMetas] = useState([]);   // [{description, category, tagOptions, selectedTags}]
+  const [uploading, setUploading] = useState(false);
 
-  const fileInputRef = useRef(null);
+  const showMessage = (m) => alert(m);
+  const updateMeta  = (idx, patch) =>
+    setFileMetas((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
 
-  const detectDataType = (fileName) => {
-    const ext = fileName.split('.').pop().toLowerCase();
-    for (const [type, extensions] of Object.entries(typeMap)) {
-      if (extensions.includes(ext)) return type;
-    }
-    return '기타';
+  /* ── 파일 선택 ───────────────────────── */
+  const handleFileChange = (e) => {
+    const chosen = Array.from(e.target.files || []);
+    setFiles(chosen);
+    setFileMetas(
+      chosen.map(() => ({
+        description: '',
+        category:    categories[0],
+        tagOptions:  [],
+        selectedTags: [],
+      })),
+    );
   };
 
-  const getFileTitle = (fileName) => fileName.replace(/\.[^/.]+$/, "");
+  /* ── 태그 자동 생성 (파일별) ───────────── */
+  const handleMakeTags = async (idx) => {
+    const desc = fileMetas[idx].description.trim();
+    if (!desc) return showMessage('설명을 입력하세요.');
 
-  const handleFiles = (incomingFiles) => {
-    const filtered = Array.from(incomingFiles).filter(file => detectDataType(file.name) !== '기타');
-    if (!filtered.length) {
-      alert("지원되지 않는 파일이거나 모든 파일이 유효하지 않습니다.");
-      return;
+    try {
+      const form = new FormData();
+      form.append('description', desc);
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE}/make_tags`,
+        form,
+        { withCredentials: true },
+      );
+
+      if (res.data?.status === 'success') {
+        const tags = res.data.tags || [];
+        updateMeta(idx, { tagOptions: tags, selectedTags: tags });
+        showMessage('태그가 생성되었습니다.');
+      } else {
+        showMessage(res.data?.message || '태그 생성 실패');
+      }
+    } catch {
+      showMessage('네트워크 오류');
     }
-    setFiles(filtered);
-    setPreviewMap({});
-    setDescriptionMap({});
+  };
 
-    filtered.forEach((file) => {
-      const type = detectDataType(file.name);
-
-      if (type === "이미지") {
-        const url = URL.createObjectURL(file);
-        setPreviewMap(prev => ({ ...prev, [file.name]: url }));
-      }
-
-      if (type === "영상") {
-        const video = document.createElement("video");
-        const canvas = document.createElement("canvas");
-        const url = URL.createObjectURL(file);
-        video.src = url;
-
-        video.onloadedmetadata = () => {
-          video.currentTime = 0.1;
-        };
-
-        video.onseeked = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL();
-          setPreviewMap(prev => ({ ...prev, [file.name]: dataUrl }));
-        };
-      }
+  /* ── 태그 토글 ────────────────────────── */
+  const toggleTag = (idx, t) => {
+    const { selectedTags } = fileMetas[idx];
+    updateMeta(idx, {
+      selectedTags: selectedTags.includes(t)
+        ? selectedTags.filter((x) => x !== t)
+        : [...selectedTags, t],
     });
   };
 
-  const handleDrop = (e) => {
+  /* ── 업로드 ───────────────────────────── */
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCategory) return alert("카테고리를 먼저 선택하세요.");
-    handleFiles(e.dataTransfer.files);
-  };
+    if (!files.length) return showMessage('업로드할 파일을 선택하세요.');
 
-  const handleDragOver = (e) => e.preventDefault();
+    const form = new FormData();
+    files.forEach((f) => form.append('file', f));
 
-  const handleClickUploadBox = () => {
-    if (!selectedCategory) return alert("카테고리를 먼저 선택하세요.");
-    fileInputRef.current?.click();
-  };
+    const metaList = fileMetas.map((m) => ({
+      description: m.description.trim(),
+      tags:        m.selectedTags.join(','),
+      category:    m.category,
+    }));
+    form.append('meta', JSON.stringify(metaList));
 
-  const handleDescriptionChange = (fileName, text) => {
-    setDescriptionMap(prev => ({ ...prev, [fileName]: text }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!files.length || !selectedCategory) return alert("카테고리와 파일을 모두 선택하세요.");
-
-    const missing = files.filter(file => {
-      const desc = useUnifiedDescription ? unifiedDescription : descriptionMap[file.name];
-      return !desc?.trim();
-    });
-    if (missing.length > 0) return alert("모든 파일에 대한 설명을 입력하세요.");
-
-    const existing = JSON.parse(localStorage.getItem("uploads") || "[]");
-    for (const file of files) {
-      const type = detectDataType(file.name);
-      const newUpload = {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        fileName: file.name,
-        title: getFileTitle(file.name),
-        type,
-        category: selectedCategory,
-        description: useUnifiedDescription ? unifiedDescription : descriptionMap[file.name],
-        previewUrl: previewMap[file.name] || "",
-      };
-      existing.push(newUpload);
+    setUploading(true);
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE}/upload`,
+        form,
+        { withCredentials: true },
+      );
+      if (res.data?.status === 'success') {
+        showMessage('업로드 완료!');
+        setFiles([]);
+        setFileMetas([]);
+	window.location.reload();
+      } else {
+        showMessage(res.data?.message || '업로드 실패');
+      }
+    } catch {
+      showMessage('네트워크 오류');
+    } finally {
+      setUploading(false);
     }
-    localStorage.setItem("uploads", JSON.stringify(existing));
-    alert("파일이 성공적으로 업로드되었습니다.");
-    setFiles([]);
-    setPreviewMap({});
-    setDescriptionMap({});
-    setUnifiedDescription("");
   };
 
+  /* ── UI ───────────────────────────────── */
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-8">📁 파일 업로드</h1>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-3 gap-4">
-          {categories.map(cat => (
-            <div
-              key={cat.name}
-              onClick={() => setSelectedCategory(cat.name)}
-              className={`cursor-pointer p-4 border rounded text-center transition ${
-                selectedCategory === cat.name ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-50'
-              }`}
-            >
-              <div className="text-2xl mb-1">{cat.icon}</div>
-              <div className="text-sm font-medium">{cat.name}</div>
-            </div>
-          ))}
-        </div>
+    <div className="max-w-3xl mx-auto px-6 py-10">
+      <h1 className="text-2xl font-bold text-gray-800 mb-8 text-center">⬆ 데이터 업로드</h1>
 
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={useUnifiedDescription} onChange={e => setUseUnifiedDescription(e.target.checked)} />
-          부연 설명 일괄 적용
-        </label>
-
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onClick={handleClickUploadBox}
-          className="mt-4 p-8 border-2 border-dotted rounded-2xl bg-sky-300 text-white text-center cursor-pointer select-none"
-        >
-          <div className="text-4xl mb-2">📄</div>
-          <p className="text-lg font-semibold">Drop files here</p>
-          <p className="mt-2 text-sm">or <span className="underline">Choose file</span></p>
+      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-6">
+        {/* 파일 선택 */}
+        <div>
+          <label className="block font-medium mb-1">파일 선택 (여러 개 가능)</label>
           <input
             type="file"
-            ref={fileInputRef}
-            className="hidden"
             multiple
-            onChange={(e) => handleFiles(e.target.files)}
+            onChange={handleFileChange}
+            className="w-full border rounded p-2 text-sm"
+            required
           />
         </div>
 
-        {useUnifiedDescription && files.length > 0 && (
-          <>
-            <div className="mt-6 flex flex-wrap gap-4">
-              {files.map(file => (
-                <div key={file.name} className="w-40">
-                  {previewMap[file.name] && (
-                    <img
-                      src={previewMap[file.name]}
-                      alt="미리보기"
-                      className="w-full h-32 object-contain border rounded mb-2"
-                    />
-                  )}
-                  <p className="text-center text-sm truncate">{getFileTitle(file.name)}</p>
+        {/* 파일별 카드 */}
+        {files.map((file, idx) => {
+          const meta = fileMetas[idx] || {};
+          return (
+            <div key={idx} className="border rounded-lg p-4 space-y-3">
+              <h2 className="font-semibold text-gray-700">📄 {file.name}</h2>
+
+              {/* 설명 */}
+              <div>
+                <label className="block text-sm font-medium mb-1">설명</label>
+                <textarea
+                  rows="3"
+                  value={meta.description}
+                  onChange={(e) => updateMeta(idx, { description: e.target.value })}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="파일 설명"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleMakeTags(idx)}
+                  className="mt-2 px-3 py-1 text-xs bg-purple-600 text-white rounded"
+                >
+                  태그 생성
+                </button>
+              </div>
+
+              {/* 태그 선택 */}
+              {meta.tagOptions.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {meta.tagOptions.map((t) => {
+                    const selected = meta.selectedTags.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => toggleTag(idx, t)}
+                        className={`px-2 py-1 rounded text-xs border
+                          ${selected ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700'}
+                        `}
+                      >
+                        #{t}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <textarea
-                value={unifiedDescription}
-                onChange={(e) => setUnifiedDescription(e.target.value)}
-                placeholder="모든 파일에 적용할 설명 입력"
-                className="border p-2 rounded w-full"
-                rows="3"
-              />
-            </div>
-          </>
-        )}
+              )}
 
-        {!useUnifiedDescription && files.map(file => (
-          <div key={file.name} className="mt-6 border rounded-lg p-4 bg-gray-50">
-            <p className="font-semibold text-gray-800 mb-2">{getFileTitle(file.name)}</p>
-            {previewMap[file.name] && (
-              <img
-                src={previewMap[file.name]}
-                alt="미리보기"
-                className="max-h-48 mb-3 border rounded"
-              />
-            )}
-            <textarea
-              value={descriptionMap[file.name] || ""}
-              onChange={(e) => handleDescriptionChange(file.name, e.target.value)}
-              placeholder="이 파일에 대한 설명 입력"
-              className="border p-2 rounded w-full"
-              rows="3"
-            />
-          </div>
-        ))}
+              {/* 카테고리 선택 (개별) */}
+              <div>
+                <label className="block text-sm font-medium mb-1">카테고리</label>
+                <select
+                  value={meta.category}
+                  onChange={(e) => updateMeta(idx, { category: e.target.value })}
+                  className="border rounded p-2 text-sm"
+                >
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          );
+        })}
 
+        {/* 업로드 버튼 */}
         <button
           type="submit"
-          className="bg-indigo-500 text-white px-6 py-2 rounded-full hover:bg-indigo-600"
-          disabled={!files.length}
+          disabled={uploading}
+          className="w-full bg-blue-600 text-white py-2 rounded disabled:opacity-60"
         >
-          업로드
+          {uploading ? '업로드 중…' : '업로드'}
         </button>
       </form>
     </div>

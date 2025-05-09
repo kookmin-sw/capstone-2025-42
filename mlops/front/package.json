@@ -4,12 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "axios": "^1.6.8",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "leaflet": "^1.9.4",
@@ -17,7 +18,9 @@
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.5.3",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "chart.js": "^4.4.0",
+    "react-chartjs-2": "^5.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

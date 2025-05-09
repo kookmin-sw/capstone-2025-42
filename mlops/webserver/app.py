@@ -12,6 +12,7 @@ from minio import Minio
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import pandas as pd
+from psycopg2.extras import RealDictCursor
 import jwt
 from uuid import uuid4
 import json
@@ -22,12 +23,12 @@ from urllib.parse import unquote
 from mecab import MeCab
 from flask_cors import CORS
 from functools import wraps
-from collections import Counter
 from sqlalchemy import create_engine, text
+from collections import Counter, defaultdict
 
 
 app = Flask(__name__, static_folder="dist", static_url_path="")
-CORS(app)
+CORS(app, origins="http://localhost:5173", supports_credentials=True) 
 
 
 def load_secret(name, default=""):
@@ -71,16 +72,6 @@ else:
 DB_URI = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@postgres:5432/airflow"
 engine = create_engine(DB_URI)
 
-
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def serve_react(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, "index.html")
-
-
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -103,10 +94,163 @@ def token_required(f):
     return decorated
 
 
+@app.route("/region_file_count_auth", methods=["GET"])
+@token_required
+def get_region_file_count_auth(user_id, username):
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT v.village_id, v.region, v.district
+        FROM   users          AS u
+        JOIN   village        AS v ON v.village_id = u.current_village_id
+        WHERE  u.user_id = %s;
+        """,
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return jsonify({"status": "error", "message": "마을 정보가 없습니다."}), 404
+
+    village_id, region, district = row
+
+    cur.execute(
+        "SELECT COUNT(*) FROM uploaded_file WHERE village_id = %s;",
+        (village_id,),
+    )
+    total_cnt = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT file_type, COUNT(*) 
+        FROM   uploaded_file
+        WHERE  village_id = %s
+        GROUP  BY file_type;
+        """,
+        (village_id,),
+    )
+    type_counts = {ftype: cnt for ftype, cnt in cur.fetchall()}
+
+    return jsonify(
+        {
+            "status": "success",
+            "village_id": village_id,
+            "region": region,
+            "district": district,
+            "total": total_cnt,
+            "type_counts": type_counts,
+        }
+    ), 200
+
+
+@app.route("/region_file_count", methods=["GET"])
+def get_region_file_count():
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM uploaded_file;")
+    total_cnt = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT file_type, COUNT(*)
+        FROM   uploaded_file
+        GROUP  BY file_type;
+        """
+    )
+    type_counts = {ftype: cnt for ftype, cnt in cur.fetchall()}
+
+    return jsonify(
+        {
+            "status": "success",
+            "village_id": None,
+            "region": "시도(전체)",
+            "district": "시군구(전체)",
+            "total": total_cnt,
+            "type_counts": type_counts,
+        }
+    ), 200
+
+
+@app.route("/region_uploads", methods=["GET"])
+def region_uploads():
+    """
+    각 시/도-시/군/구 단위 업로드 개수
+    반환 예)
+    [
+      {"region": "경기도", "district": "수원시", "count": 42},
+      {"region": "경기도", "district": "고양시", "count": 37},
+      ...
+    ]
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT v.region,
+               v.district,
+               COUNT(*) AS count
+        FROM   uploaded_file AS f
+        JOIN   village       AS v
+          ON   v.village_id  = f.village_id
+        GROUP  BY v.region, v.district
+        ORDER  BY v.region, count DESC;
+        """
+    )
+    return jsonify({"status": "success", "data": cur.fetchall()}), 200
+
+
+@app.route("/top_keywords", methods=["GET"])
+def top_keywords():
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT t.tag_name AS tag,
+               COUNT(*)   AS count
+        FROM   file_tags  AS ft
+        JOIN   tags       AS t  ON t.tag_id  = ft.tag_id
+        GROUP  BY t.tag_name
+        ORDER  BY count DESC
+        LIMIT  20;
+        """
+    )
+    rows = cur.fetchall()
+    return jsonify({"status": "success", "data": rows}), 200
+
+
+@app.route("/village_uploads", methods=["GET"])
+def village_uploads():
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT v.region, v.district, COUNT(*) AS count
+        FROM   uploaded_file AS f
+        JOIN   village       AS v ON v.village_id = f.village_id
+        GROUP  BY v.region, v.district;
+        """
+    )
+    rows = cur.fetchall()
+    return jsonify({"status": "success", "data": rows}), 200
+
+
+@app.route("/api/regions", methods=["GET"])
+def get_regions():
+    cur  = conn.cursor()
+    cur.execute("SELECT region, district FROM village ORDER BY region, district;")
+    rows = cur.fetchall()
+
+    data = {}
+    for region, district in rows:
+        data.setdefault(region, []).append(district)
+
+    # 공통 ‘전체’ 옵션 추가
+    data = {"시도(전체)": ["시군구(전체)"], **data}
+    return jsonify(data), 200
+
+
 @app.route("/api/register", methods=["POST"])
 def register():
     data = request.get_json()
-    username = data["username"]
+    username = data["name"]
+    email = data["email"]
     password = data["password"]
     password_hash = generate_password_hash(password)
 
@@ -114,8 +258,8 @@ def register():
 
     try:
         cur.execute(
-            "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
-            (username, password_hash),
+            "INSERT INTO users (username, password_hash, email) VALUES (%s, %s, %s)",
+            (username, password_hash, email),
         )
         conn.commit()
     except psycopg2.errors.UniqueViolation:
@@ -144,7 +288,7 @@ def delete_account(user_id, username):
 
     # DB 연결 및 유저 삭제
     cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
     conn.commit()
     cur.close()
 
@@ -163,30 +307,63 @@ def delete_account(user_id, username):
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    username = data["username"]
-    password = data["password"]
+    data = request.get_json() or {}
 
-    cur = conn.cursor()
-    cur.execute("SELECT id, password_hash FROM users WHERE username = %s", (username,))
-    row = cur.fetchone()
-    cur.close()
+    # 1) 입력 검증
+    required = ("email", "password", "region", "district")
+    missing = [f for f in required if f not in data or not data[f]]
+    if missing:
+        return jsonify({"message": f"누락 필드: {', '.join(missing)}"}), 400
 
-    if row and check_password_hash(row[1], password):
-        user_id = row[0]
-        payload = {
-            "user_id": user_id,
-            "username": username,
-            "exp": datetime.utcnow() + timedelta(hours=1),
-        }
-        token = jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
-        response = make_response(jsonify({"message": "로그인 성공"}))
-        response.set_cookie(
-            "token", token, httponly=True, secure=False, samesite="Lax", max_age=3600
+    email   = data["email"]
+    password   = data["password"]
+    region     = data["region"]
+    district   = data["district"]
+
+    # 2) 사용자 조회
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT user_id, password_hash, username FROM users WHERE email = %s",
+            (email,),
         )
-        return response
+        row = cur.fetchone()
+        username = row[2]
 
-    return jsonify({"message": "로그인 실패"}), 401
+    if not row or not check_password_hash(row[1], password):
+        return jsonify({"message": "아이디‧비밀번호 불일치"}), 401
+
+    user_id = row[0]
+
+    # 3) 지역(village) 지정/변경
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT village_id FROM village "
+            "WHERE region = %s AND district = %s",
+            (region, district),
+        )
+        village_row = cur.fetchone()
+
+        if village_row:                       # 유효한 지역만 업데이트
+            cur.execute(
+                "UPDATE users SET current_village_id = %s WHERE user_id = %s",
+                (village_row[0], user_id),
+            )
+        conn.commit()
+
+    # 4) JWT 발급 & 쿠키 설정
+    payload = {
+        "user_id": user_id,
+        "username": username,
+        "exp": datetime.utcnow() + timedelta(hours=1),
+    }
+    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
+
+    resp = make_response(jsonify({"message": "로그인 성공"}))
+    resp.set_cookie(
+        "token", token,
+        httponly=True, secure=False, samesite="Lax", max_age=3600
+    )
+    return resp
 
 
 @app.route("/api/logout", methods=["POST"])
@@ -227,64 +404,157 @@ def top5_nouns(text):
 @token_required
 def upload(user_id, username):
     uploaded_files = request.files.getlist("file")
-    description = request.form.get("description", "")
-    tags = request.form.get("tags", "")
-    title = request.form.get("title", "(제목 없음)")
+
+    # ---------- (1) 파일별 메타 JSON 파싱 ----------
+    try:
+        meta_list = json.loads(request.form.get("meta", "[]"))
+    except json.JSONDecodeError:
+        return jsonify({"status": "error", "message": "meta JSON 형식 오류"}), 400
+
+    if len(meta_list) != len(uploaded_files):
+        return jsonify({"status": "error", "message": "meta 길이 불일치"}), 400
+
+    now = datetime.utcnow().isoformat()
+
+    # ---------- (2) village 조회 ----------
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT current_village_id FROM users WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        current_village_id = row and row[0]
 
     saved_files = []
 
-    for file in uploaded_files:
-        if file.filename:
-            file_name = file.filename
-            ext = os.path.splitext(file_name)[1]
-            base_name = os.path.splitext(file_name)[0]
-            unique_id = str(uuid4())
+    # ---------- (3) 파일별 처리 ----------
+    for idx, file in enumerate(uploaded_files):
+        if not file or not file.filename:
+            continue
 
-            file_key = f"{base_name}_{unique_id}{ext}"
-            json_key = f"meta/{base_name}_{unique_id}.json"
+        # 3-1) 개별 메타 가져오기
+        meta = meta_list[idx] if idx < len(meta_list) else {}
+        description = meta.get("description", "")
+        tags        = meta.get("tags", "")
+        category    = meta.get("category", "")
 
-            file_path = f"/tmp/{file_key}"
-            json_path = f"/tmp/{json_key}"
-            file.save(file_path)
+        file_name  = file.filename
+        base_name, ext = os.path.splitext(file_name)
+        uuid_val   = str(uuid4())
 
-            json_data = {
+        file_key = f"{base_name}_{uuid_val}{ext}"
+        json_key = f"meta/{base_name}_{uuid_val}.json"
+
+        file_path = f"/tmp/{file_key}"
+        json_path = f"/tmp/{json_key}"
+
+        # 3-2) 파일 저장
+        file.save(file_path)
+
+        json_data = {
+            "description":        description,
+            "tags":               tags,
+            "category":           category,
+            "file_name":          file_name,
+            "uuid":               uuid_val,
+            "upload_time":        now,
+            "user_id":            user_id,
+            "current_village_id": current_village_id,
+        }
+
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        with open(json_path, "w") as f:
+            json.dump(json_data, f, ensure_ascii=False)
+
+        # 3-3) MinIO 업로드
+        minio_client.fput_object(BUCKET_NAME, file_key, file_path)
+        minio_client.fput_object(BUCKET_NAME, json_key, json_path)
+
+        os.remove(file_path)
+        os.remove(json_path)
+
+        saved_files.append(
+            {
+                "file_name":  file_name,
+                "title":      base_name,
                 "description": description,
-                "tags": tags,
-                "file_name": file_name,
-                "uuid": unique_id,
-                "upload_time": datetime.now().isoformat(),
-                "user_id": user_id,
+                "uuid":       uuid_val,
+                "time":       now,
             }
-
-            os.makedirs(os.path.dirname(json_path), exist_ok=True)
-            with open(json_path, "w") as f:
-                json.dump(json_data, f)
-
-            minio_client.fput_object(BUCKET_NAME, file_key, file_path)
-            minio_client.fput_object(BUCKET_NAME, json_key, json_path)
-
-            os.remove(file_path)
-            os.remove(json_path)
-
-            saved_files.append(
-                {
-                    "file_name": file_name,
-                    "title": title,
-                    "description": description,
-                    "uuid": unique_id,
-                    "time": datetime.now().isoformat(),
-                }
-            )
+        )
 
     return jsonify({"status": "success", "files": saved_files})
 
 
+@app.route("/get_categories", methods=["GET"])
+@token_required
+def get_categories(user_id, username):
+    query = """
+    SELECT category AS name, COUNT(*) AS count
+    FROM uploaded_file
+    WHERE category IS NOT NULL
+    GROUP BY category
+    ORDER BY count DESC
+    """
+    with conn.cursor() as cur:
+        cur.execute(query)
+        rows = cur.fetchall()
+        result = [{"name": name, "count": count} for name, count in rows]
+
+    return jsonify(result)
+
+
+@app.route("/search_by_category", methods=["GET"])
+@token_required
+def search_by_category(user_id, username):
+    category = request.args.get("category")
+
+    if not category:
+        return jsonify({"error": "category parameter is required"}), 400
+
+    query = """
+    SELECT
+        uf.file_path,
+        uf.uuid,
+        uf.description,
+        uf.file_id,
+        v.region,
+        v.district,
+        uf.uploaded_at,
+        uf.file_type
+    FROM uploaded_file uf
+    LEFT JOIN village v ON uf.village_id = v.village_id
+    WHERE uf.category = %s
+    ORDER BY uf.uploaded_at DESC
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(query, (category,))
+        rows = cur.fetchall()
+    
+    result = [
+        {
+            "id": row[3],
+            "title": row[0].replace(f"_{row[1]}", ""),
+            "summary": row[2].split("|")[-1],
+            "region": row[4],
+            "district": row[5],
+            "date": row[6],
+            "type": row[7],
+            "file_path": row[0],
+        }
+        for row in rows
+    ]
+
+    return jsonify(result)
+
+
 @app.route("/search", methods=["GET"])
 def search():
-    keyword = request.args.get("word", "")
-    order = request.args.get("order", "name")
-    date_filter = request.args.get("date", "all")
-    exp = request.args.get("exp", "")
+    keyword_string = request.args.get("word", "")
+    order_string = request.args.get("order", "")
+    date_string = request.args.get("date", "all")  # all, today, week
+    exp_string = request.args.get("exp", "")  # text, video, ...
 
     conditions = []
     params = []
@@ -307,17 +577,48 @@ def search():
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     order_sql = "uploaded_at DESC" if order == "recent" else "file_name ASC"
 
+    # 최종 쿼리 조립
+    query = f"""
+        SELECT 
+          uf.file_path,
+          uf.uuid,
+          uf.description,
+          uf.file_id,
+          v.region,
+          v.district,
+          uf.uploaded_at,
+          uf.file_type,
+          uf.category
+        FROM uploaded_file uf
+        LEFT JOIN village v ON uf.village_id = v.village_id
+        {where_clause}
+        {order_by}
+    """
+
+    results = defaultdict(list)
+    related_word = []
     with conn.cursor() as cur:
-        cur.execute(f"""
-            SELECT file_path, uuid
-            FROM uploaded_file
-            {where}
-            ORDER BY {order_sql}
-        """, params)
-        results = [
-            {"file_name": row[0].replace(f"_{row[1]}", ""), "real_path": row[0]}
-            for row in cur.fetchall()
-        ]
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        all_description_text = ""
+        for row in rows:
+            if row[2] is not None:
+                all_description_text += row[2]
+                all_description_text += " "
+        related_word_set_list = top5_nouns(all_description_text)
+        related_word = [word for word, _ in related_word_set_list]
+        for row in rows:
+            category = row[8]
+            results[category].append({
+                "id": row[3],
+                "title": row[0].replace(f"_{row[1]}", ""),
+                "summary": row[2].split("|")[-1],
+                "region": row[4],
+                "district": row[5],
+                "date": row[6],
+                "type": row[7],
+                "file_path": row[0],
+            })
 
     return jsonify({"results": results})
 
@@ -462,18 +763,26 @@ def download_numerical_filtered():
 
 
 @app.route("/download", methods=["GET"])
-def download_file():
-    file_name = request.args.get("file_name")
-    origin_name = request.args.get("origin_name") or "file.csv"
+@token_required
+def download(user_id, username):
+    file_path = request.args.get("file_path")
+    title = request.args.get("title")
 
-    if not file_name:
-        return {"error": "file_name query param required"}, 400
+    if not file_path:
+        return {"error": "file_path query param required"}, 400
 
-    local_path = f"/tmp/{os.path.basename(file_name)}"
-    try:
-        minio_client.fget_object(BUCKET_NAME, file_name, local_path)
-    except Exception as e:
-        return {"error": str(e)}, 500
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT file_path FROM uploaded_file WHERE file_path = %s",
+            (unquote(file_path),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "File not found"}, 404
+        file_path = row[0]
+
+    local_path = f"/tmp/{os.path.basename(file_path)}"
+    minio_client.fget_object(BUCKET_NAME, file_path, local_path)
 
     @after_this_request
     def remove_temp_file(response):
@@ -483,7 +792,7 @@ def download_file():
             pass
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=origin_name)
+    return send_file(local_path, as_attachment=True, download_name=title)
 
 
 @app.route("/preview_merge_table", methods=["GET"])

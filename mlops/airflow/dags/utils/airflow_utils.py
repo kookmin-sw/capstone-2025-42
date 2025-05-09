@@ -10,7 +10,7 @@ def make_json_meta_file(data, meta, file_type):
         json_data = json.load(f)
 
     find_key = ["createdate", "gpslatitude", "gpslongitude"]
-    data["text"] += " "
+    data["text"] += "|"
     data["text"] += json_data["description"]
     if "createdate" in data["metadata"]:
         json_data["datetime"] = data["metadata"]["createdate"]
