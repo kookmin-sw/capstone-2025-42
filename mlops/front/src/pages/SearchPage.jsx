@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { regionData } from '../data/regionData'; // 존재 시 사용
+import { regionData } from '../data/regionData';
 import NumericalDownloads from './NumericalDownloads.jsx';
 import MergeTablesModal from './MergeTablesModal.jsx';
 import { useLocation } from 'react-router-dom';
@@ -53,7 +53,7 @@ export default function SearchPage() {
           method: 'GET',
           credentials: 'include',
         }),
-          fetch(`/search_numerical?word=${encodeURIComponent(searchKeyword)}`, {
+        fetch(`/search_numerical?word=${encodeURIComponent(searchKeyword)}`, {
           method: 'GET',
         }),
       ]);
@@ -66,9 +66,9 @@ export default function SearchPage() {
         type: 'file',
         title: item.file_name,
         summary: item.real_path,
-        region: '-',   // 미지원
-        district: '-', // 미지원
-        date: '-',     // 미지원
+        region: '-',
+        district: '-',
+        date: '-',
         fileUrl: `/download?file_name=${encodeURIComponent(item.real_path)}&origin_name=${encodeURIComponent(item.file_name)}`,
       }));
 
@@ -77,10 +77,10 @@ export default function SearchPage() {
         type: 'numerical',
         title: item.table_name,
         summary: `${item.year}년 ${item.month}월 ${item.category}`,
-        region: '-',   // 미지원
-        district: '-', // 미지원
-        date: '-',     // 미지원
-        fileUrl: `/download_numerical?table_name=${encodeURIComponent(item.table_name)}`, // 추후 구현 필요
+        region: '-',
+        district: '-',
+        date: '-',
+        fileUrl: `/download_numerical?table_name=${encodeURIComponent(item.table_name)}`,
       }));
 
       setFilteredData([...fileResults, ...numericalResults]);
@@ -93,15 +93,15 @@ export default function SearchPage() {
 
   const handleDetail = (item) => {
     if (item.type === 'numerical') {
-      setMergeTable({ table_name: item.title }); // 머지 팝업 호출
+      setMergeTable({ table_name: item.title });
     } else {
-    alert(`상세 보기 기능은 수치 데이터에만 지원됩니다.`);
+      alert(`상세 보기 기능은 수치 데이터에만 지원됩니다.`);
     }
   };
 
   const handleDownload = (item) => {
     if (item.type === 'numerical') {
-      setSelectedNumerical(item.title); // table_name 전달
+      setSelectedNumerical(item.title);
     } else {
       window.open(item.fileUrl, '_blank');
     }
@@ -111,7 +111,6 @@ export default function SearchPage() {
     <div className="bg-white min-h-screen px-6 py-10">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">데이터 검색</h1>
 
-      {/* 카테고리 UI (비활성화된 필터) */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6 mb-10">
         {categories.map((cat) => (
           <div
@@ -128,7 +127,6 @@ export default function SearchPage() {
         ))}
       </div>
 
-      {/* 검색 필터 바 */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end mb-10 bg-gray-100 p-4 rounded-lg">
         <select value={selectedRegion} onChange={handleRegionChange} className="border rounded p-2">
           {Object.keys(regionData).map((region) => (
@@ -214,8 +212,8 @@ export default function SearchPage() {
       )}
       {selectedNumerical && (
         <NumericalDownloads
-            tableName={selectedNumerical}
-            onClose={() => setSelectedNumerical(null)}
+          tableName={selectedNumerical}
+          onClose={() => setSelectedNumerical(null)}
         />
       )}
       {mergeTable && (
