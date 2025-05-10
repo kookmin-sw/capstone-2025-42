@@ -133,6 +133,22 @@ services:
       - postgresql_database
       - jwt_secret_key
 
+  front:
+    build:
+      context: ./front
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./front:/app
+      - /app/node_modules
+    working_dir: /app
+    depends_on:
+      - webserver
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_BASE=http://localhost:8792
+
+
 volumes:
   postgres_data:
   minio_data:

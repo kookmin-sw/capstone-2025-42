@@ -6,14 +6,18 @@ import os, json
 from urllib.parse import unquote_plus
 from minio import Minio
 import magic
+import psycopg2
 from utils.minio_utils import download_meta_and_file
 from utils.secrets import load_secret
 from utils.airflow_utils import get_file_type_by_magic, is_hwpx
 
-
 MINIO_URL = os.getenv("MINIO_URL", "minio:9000")
 MINIO_ACCESS_KEY = load_secret("minio_root_user")
 MINIO_SECRET_KEY = load_secret("minio_root_password")
+POSTGRESQL_HOST = load_secret("postgresql_host")
+POSTGRESQL_DATABASE = load_secret("postgresql_database")
+POSTGRESQL_USER = load_secret("postgresql_user")
+POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 
 
 with DAG(
@@ -47,6 +51,73 @@ with DAG(
         # 메타/파일 다운로드
         meta_path, file_path = download_meta_and_file(client, bucket, key)
         file_type = get_file_type_by_magic(file_path)
+
+        meta_data = {}
+        with open(meta_path) as f:
+            meta_data = json.load(f)
+        file_name_list = meta_data["file_name"].rsplit(".", 1)
+        real_file_path = f"{file_name_list[0]}_{meta_data['uuid']}.{file_name_list[-1]}"
+        description = meta_data["description"] + " | "
+
+        conn = psycopg2.connect(
+            host=POSTGRESQL_HOST,
+            database=POSTGRESQL_DATABASE,
+            user=POSTGRESQL_USER,
+            password=POSTGRESQL_PASSWORD,
+        )
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO uploaded_file (
+                file_name, file_type, file_path, uuid, description,
+                uploaded_at, uploader_id, category, status, village_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    	    RETURNING file_id;
+            """,
+            (
+                meta_data["file_name"],
+                file_type,
+                real_file_path,
+                meta_data["uuid"],
+                description,
+                meta_data["upload_time"],
+                meta_data["user_id"],
+                meta_data["category"],
+                "progress",
+                meta_data["current_village_id"],
+            ),
+        )
+        file_id = cur.fetchone()[0]
+
+        insert_sql = """
+            INSERT INTO tags (tag_name, description)
+            VALUES (%s, %s)
+            ON CONFLICT (tag_name) DO NOTHING;
+        """
+        tags = meta_data["tags"].split(",")
+        tag_values = [(tag.strip(), "") for tag in tags]
+        cur.executemany(insert_sql, tag_values)
+        conn.commit()
+
+        if meta_data["tags"] != "":
+            placeholders = ",".join(["%s"] * len(tags))
+            cur.execute(
+                f"SELECT tag_id, tag_name FROM tags WHERE tag_name IN ({placeholders})",
+                tags,
+            )
+            rows = cur.fetchall()
+            tag_map = {name: tag_id for tag_id, name in rows}
+            for tag in tags:
+                tag_id = tag_map.get(tag)
+                if tag_id:
+                    cur.execute(
+                        "INSERT INTO file_tags (file_id, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                        (file_id, tag_id),
+                    )
+            conn.commit()
+
+        cur.close()
+        conn.close()
 
         context["ti"].xcom_push(key="meta_path", value=meta_path)
         context["ti"].xcom_push(key="file_path", value=file_path)

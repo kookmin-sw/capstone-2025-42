@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 import struct, zlib, pathlib
 from pathlib import Path
 import PyPDF2
+import openpyxl
+import xlrd
 
 
 def to_iso_str(dt):
@@ -90,6 +92,30 @@ def get_file_ctime_created_date(path):
         return to_iso_str(datetime.fromtimestamp(ts))
     except:
         return ""
+
+
+def extract_xlsx(filepath):
+    wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+    chunks = []
+    for ws in wb.worksheets:  # 모든 시트 순회
+        for row in ws.iter_rows(values_only=True):
+            for value in row:
+                if value not in (None, ""):
+                    chunks.append(str(value))
+    wb.close()
+    return "\n".join(chunks)
+
+
+def extract_xls(filepath):
+    book = xlrd.open_workbook(filepath, formatting_info=False)
+    chunks = []
+    for sheet in book.sheets():
+        for r in range(sheet.nrows):
+            for c in range(sheet.ncols):
+                val = sheet.cell_value(r, c)
+                if val not in ("", None):
+                    chunks.append(str(val))
+    return "\n".join(chunks)
 
 
 def extract_ppt_doc(filepath):
@@ -261,6 +287,8 @@ def process_text(filepath):
                     ext = "docx"
                 elif any(name.endswith("ppt/presentation.xml") for name in names):
                     ext = "pptx"
+                elif any(name.endswith("xl/workbook.xml") for name in names):
+                    ext = "xlsx"
         except:
             pass
     elif (
@@ -285,6 +313,11 @@ def process_text(filepath):
                     ext = "pptx"
         except:
             pass
+    elif mime_type in [
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]:
+        ext = "xls"
     elif mime_type == "text/xml":
         try:
             hwpfilepath = pathlib.Path(filepath).expanduser()
@@ -323,6 +356,8 @@ def process_text(filepath):
         "docx": extract_docx,
         "pptx": extract_pptx,
         "pdf": extract_pdf,
+        "xlsx": extract_xlsx,
+        "xls": extract_xls,
         "default": extract_default,
     }.get(ext)
 
@@ -334,6 +369,8 @@ def process_text(filepath):
         "docx": get_office_openxml_created_date,
         "pptx": get_office_openxml_created_date,
         "pdf": get_pdf_created_date,
+        "xls": get_ole_created_date,
+        "xlsx": get_office_openxml_created_date,
         "default": get_file_ctime_created_date,
     }.get(ext)
 

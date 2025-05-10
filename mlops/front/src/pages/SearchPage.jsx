@@ -1,226 +1,297 @@
-import { useState } from 'react';
-import { regionData } from '../data/regionData';
-import NumericalDownloads from './NumericalDownloads.jsx';
-import MergeTablesModal from './MergeTablesModal.jsx';
-import { useLocation } from 'react-router-dom';
+// src/pages/SearchPage.jsx
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const categories = [
-  { name: '건강', icon: '🩺', count: 13 },
-  { name: '동물', icon: '🐐', count: 18 },
-  { name: '식품', icon: '🍽️', count: 32 },
-  { name: '문화', icon: '🎭', count: 53 },
-  { name: '생활', icon: '🍳', count: 26 },
-  { name: '자원환경', icon: '🌿', count: 37 },
-  { name: '기타', icon: '➕', count: 16 },
-];
+/* ─────────── 파일 유형 매핑 ─────────── */
+const FILE_TYPE_MAP = { text: '문서', video: '영상', image: '이미지' };
+const dataTypes   = ['전체', ...Object.values(FILE_TYPE_MAP)];
+const sortOptions = ['제목순', '최신순', '지역순'];
 
-const dataTypes = ['전체', '문서', '영상', '이미지', '엑셀'];
-const sortOptions = ['제목순', '최신순'];
+/* 카테고리 → 이모지 */
+const CATEGORY_EMOJI_MAP = {
+  건강: '🩺', 동물: '🐐', 식품: '🍽️', 문화: '🎭',
+  생활: '🍳', 자원환경: '🌿', 기타: '➕',
+};
+
+/* ───── fetch 래퍼 (세션 쿠키만) ───── */
+const fetchWithSession = async (url, opts = {}) => {
+  const res = await fetch(url, { ...opts, credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
 
 export default function SearchPage() {
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  const keywordFromURL = params.get('keyword') || '';
+  const navigate = useNavigate();
 
-  const [searchKeyword, setSearchKeyword] = useState(keywordFromURL);
-  const [selectedDataType, setSelectedDataType] = useState('전체');
-  const [selectedSort, setSelectedSort] = useState('최신순');
-  const [selectedRegion, setSelectedRegion] = useState('시도(전체)');
-  const [selectedDistrict, setSelectedDistrict] = useState('시군구(전체)');
+  /* 로그인 여부: /api/me 로 판정 ---------------- */
+  const [loggedIn, setLoggedIn] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
+        setLoggedIn(true);
+      } catch {
+        setLoggedIn(false);
+      }
+    })();
+  }, []);
+
+  /* 데이터 상태 ------------------------------ */
+  const [regionData, setRegionData]            = useState({ '시도(전체)': ['시군구(전체)'] });
+  const [categories, setCategories]            = useState([]);
+  const [categoryDataMap, setCategoryDataMap]  = useState({});
+
+  /* 선택 상태 ------------------------------- */
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [filteredData, setFilteredData] = useState([]);
-  const [relatedWords, setRelatedWords] = useState([]);
-  const [selectedNumerical, setSelectedNumerical] = useState(null);
-  const [mergeTable, setMergeTable] = useState(null);
+  const [searchKeyword, setSearchKeyword]       = useState('');
+  const [selectedRegion, setSelectedRegion]     = useState('시도(전체)');
+  const [selectedDistrict, setSelectedDistrict] = useState('시군구(전체)');
+  const [selectedDataType, setSelectedDataType] = useState('전체');
+  const [selectedSort, setSelectedSort]         = useState('최신순');
+  const [relatedWords, setRelatedWords]         = useState([]);
+  const [loading, setLoading]                   = useState(false);
 
+  const typeKor2Key = (kor) =>
+    Object.entries(FILE_TYPE_MAP).find(([, v]) => v === kor)?.[0];
+
+  /* ① 지역 데이터 --------------------------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/regions`);
+        setRegionData({ '시도(전체)': ['시군구(전체)'], ...data });
+      } catch (err) { console.error('지역 데이터 로드 오류:', err); }
+    })();
+  }, []);
+
+  /* ② 카테고리 목록 ------------------------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchWithSession(`${import.meta.env.VITE_API_BASE}/get_categories`);
+        setCategories(data);        // [{ name, count }]
+      } catch (err) { console.error('카테고리 로드 오류:', err); }
+    })();
+  }, []);
+
+  /* ③ 선택 카테고리 데이터 ------------------ */
+  useEffect(() => {
+    if (!selectedCategory || categoryDataMap[selectedCategory]) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const url = new URL(`${import.meta.env.VITE_API_BASE}/search_by_category`);
+        url.searchParams.set('category', selectedCategory);
+        const data = await fetchWithSession(url);
+        setCategoryDataMap((p) => ({ ...p, [selectedCategory]: data }));
+      } catch (err) { console.error('카테고리 데이터 로드 오류:', err); }
+      finally { setLoading(false); }
+    })();
+  }, [selectedCategory, categoryDataMap]);
+
+  /* ④ /search 실행 ------------------------- */
+  const handleSearch = useCallback(async (keyword = searchKeyword) => {
+    if (!keyword.trim()) return;
+
+    const url = new URL(`${import.meta.env.VITE_API_BASE}/search`);
+    url.searchParams.set('word', keyword.trim());
+    if (selectedSort === '제목순')      url.searchParams.set('order', 'name');
+    else if (selectedSort === '최신순') url.searchParams.set('order', 'recent');
+    if (selectedDataType !== '전체')
+      url.searchParams.set('exp', typeKor2Key(selectedDataType) || 'all');
+
+    setLoading(true);
+    try {
+      const { results, related_word } = await fetchWithSession(url);
+
+      const newCats = Object.keys(results).map((name) => ({
+        name, count: results[name].length,
+      }));
+      setCategories(newCats);
+      setCategoryDataMap(results);
+      setSelectedCategory(null);          // 검색 시 선택 해제
+      setRelatedWords(related_word);
+    } catch (err) { console.error('검색 오류:', err); }
+    finally { setLoading(false); }
+  }, [searchKeyword, selectedSort, selectedDataType]);
+
+  /* ⑤ 필터·정렬 ----------------------------- */
+  const filteredData = useMemo(() => {
+    /* 선택 없음 → 모든 카테고리 데이터 합침 */
+    let data = selectedCategory
+      ? categoryDataMap[selectedCategory] || []
+      : Object.values(categoryDataMap).flat();
+
+    /* 지역·타입 필터 */
+    if (selectedRegion !== '시도(전체)')
+      data = data.filter((i) => i.region === selectedRegion);
+    if (selectedDistrict !== '시군구(전체)')
+      data = data.filter((i) => i.district === selectedDistrict);
+    if (selectedDataType !== '전체')
+      data = data.filter((i) => FILE_TYPE_MAP[i.type] === selectedDataType);
+
+    /* 정렬 */
+    if (selectedSort === '제목순')
+      data = [...data].sort((a, b) => a.title.localeCompare(b.title));
+    else if (selectedSort === '최신순')
+      data = [...data].sort((a, b) => new Date(b.date) - new Date(a.date));
+    else if (selectedSort === '지역순')
+      data = [...data].sort((a, b) => {
+        const c = a.region.localeCompare(b.region);
+        return c !== 0 ? c : a.district.localeCompare(b.district);
+      });
+
+    return data;
+  }, [
+    selectedCategory, categoryDataMap,
+    selectedRegion, selectedDistrict, selectedDataType, selectedSort,
+  ]);
+
+  /* ---- 핸들러 ---- */
   const handleRegionChange = (e) => {
-    const newRegion = e.target.value;
-    setSelectedRegion(newRegion);
+    setSelectedRegion(e.target.value);
     setSelectedDistrict('시군구(전체)');
   };
+  const handleCategoryClick = (name) => {
+    setSelectedCategory(name);
+    setSelectedDataType('전체');
+    setSelectedSort('최신순');
+  };
+  const handleRelatedClick = (word) => {
+    setSearchKeyword(word);
+    handleSearch(word);
+  };
 
-  const handleSearch = async () => {
-    const query = new URLSearchParams({
-      word: searchKeyword,
-      order: selectedSort === '최신순' ? 'recent' : 'name',
-      date: 'all',
-      exp: selectedDataType === '전체' ? 'all' : selectedDataType,
-    }).toString();
-
+  /* ✅ 다운로드 */
+  const handleDownload = async (item) => {
     try {
-      const [fileRes, numericalRes] = await Promise.all([
-        fetch(`/search?${query}`, {
-          method: 'GET',
-          credentials: 'include',
-        }),
-        fetch(`/search_numerical?word=${encodeURIComponent(searchKeyword)}`, {
-          method: 'GET',
-        }),
-      ]);
-
-      const fileData = await fileRes.json();
-      const numericalData = await numericalRes.json();
-
-      const fileResults = (fileData.results || []).map((item, i) => ({
-        id: `file-${i}`,
-        type: 'file',
-        title: item.file_name,
-        summary: item.real_path,
-        region: '-',
-        district: '-',
-        date: '-',
-        fileUrl: `/download?file_name=${encodeURIComponent(item.real_path)}&origin_name=${encodeURIComponent(item.file_name)}`,
-      }));
-
-      const numericalResults = (numericalData.results || []).map((item, i) => ({
-        id: `num-${i}`,
-        type: 'numerical',
-        title: item.table_name,
-        summary: `${item.year}년 ${item.month}월 ${item.category}`,
-        region: '-',
-        district: '-',
-        date: '-',
-        fileUrl: `/download_numerical?table_name=${encodeURIComponent(item.table_name)}`,
-      }));
-
-      setFilteredData([...fileResults, ...numericalResults]);
-      setRelatedWords(fileData.related_word || []);
-    } catch (err) {
-      console.error('검색 실패:', err);
-      setFilteredData([]);
+      await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
+    } catch {
+      alert('다운로드하려면 로그인이 필요합니다.');
+      return navigate('/login');
     }
+    const url =
+      `${import.meta.env.VITE_API_BASE}/download?` +
+      `file_path=${encodeURIComponent(item.file_path)}` +
+      `&title=${encodeURIComponent(item.title)}`;
+    window.open(url, '_blank');
   };
 
-  const handleDetail = (item) => {
-    if (item.type === 'numerical') {
-      setMergeTable({ table_name: item.title });
-    } else {
-      alert(`상세 보기 기능은 수치 데이터에만 지원됩니다.`);
-    }
-  };
-
-  const handleDownload = (item) => {
-    if (item.type === 'numerical') {
-      setSelectedNumerical(item.title);
-    } else {
-      window.open(item.fileUrl, '_blank');
-    }
-  };
-
+  /* ─────────── UI ─────────── */
   return (
     <div className="bg-white min-h-screen px-6 py-10">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">데이터 검색</h1>
 
+      {/* 🗂 카테고리 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6 mb-10">
         {categories.map((cat) => (
           <div
             key={cat.name}
-            onClick={() => setSelectedCategory(cat.name)}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg shadow cursor-pointer transition-all hover:bg-blue-100 ${
-              selectedCategory === cat.name ? 'bg-blue-100' : 'bg-blue-50'
-            }`}
+            onClick={() => handleCategoryClick(cat.name)}
+            className={`flex flex-col items-center justify-center p-4 rounded-lg shadow cursor-pointer transition-all
+              hover:bg-blue-100 ${selectedCategory === cat.name ? 'bg-blue-100' : 'bg-blue-50'}`}
           >
-            <div className="text-4xl mb-2">{cat.icon}</div>
+            <span className="text-4xl mb-2">
+              {CATEGORY_EMOJI_MAP[cat.name] ?? '📂'}
+            </span>
             <div className="text-sm font-semibold text-gray-800">{cat.name}</div>
             <div className="text-xs text-blue-600 mt-1">{cat.count}종</div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end mb-10 bg-gray-100 p-4 rounded-lg">
-        <select value={selectedRegion} onChange={handleRegionChange} className="border rounded p-2">
-          {Object.keys(regionData).map((region) => (
-            <option key={region} value={region}>{region}</option>
-          ))}
+      {/* 🔍 검색·필터 패널 */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-6 bg-gray-100 p-4 rounded-lg">
+        <select value={selectedRegion} onChange={handleRegionChange}  className="border rounded p-4">
+          {Object.keys(regionData).map((r) => <option key={r}>{r}</option>)}
         </select>
 
-        <select value={selectedDistrict} onChange={(e) => setSelectedDistrict(e.target.value)} className="border rounded p-2">
-          {regionData[selectedRegion]?.map((district) => (
-            <option key={district} value={district}>{district}</option>
-          ))}
+        <select value={selectedDistrict} onChange={(e) => setSelectedDistrict(e.target.value)} className="border rounded p-4">
+          {(regionData[selectedRegion] || []).map((d) => <option key={d}>{d}</option>)}
         </select>
 
-        <select value={selectedDataType} onChange={(e) => setSelectedDataType(e.target.value)} className="border rounded p-2">
-          {dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+        <select value={selectedDataType} onChange={(e) => setSelectedDataType(e.target.value)} className="border rounded p-4">
+          {dataTypes.map((t) => <option key={t}>{t}</option>)}
         </select>
 
-        <select value={selectedSort} onChange={(e) => setSelectedSort(e.target.value)} className="border rounded p-2">
-          {sortOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+        <select value={selectedSort} onChange={(e) => setSelectedSort(e.target.value)} className="border rounded p-4">
+          {sortOptions.map((s) => <option key={s}>{s}</option>)}
         </select>
 
-        <input
-          type="text"
-          placeholder="파일 이름 또는 설명 검색"
-          value={searchKeyword}
-          onChange={(e) => setSearchKeyword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSearch();
-          }}
-          className="w-full px-4 py-2 border border-gray-300 rounded shadow-sm"
-        />
-
-        <button
-          onClick={handleSearch}
-          className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 transition"
-        >
-          검색
-        </button>
+        {/* 검색창 */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="제목 또는 설명으로 검색"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="w-full px-4 py-2 border rounded shadow-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button onClick={() => handleSearch()}
+                  className="px-4 py-2 bg-blue-500 text-white text-sm rounded">검색
+          </button>
+        </div>
       </div>
 
+      {/* 연관검색어 */}
       {relatedWords.length > 0 && (
-        <div className="mb-6 text-sm text-gray-500">
-          연관 키워드: {relatedWords.map((w) => <span key={w} className="mr-2 text-blue-600">#{w}</span>)}
+        <div className="mb-8 flex flex-wrap gap-2">
+          {relatedWords.map((word) => (
+            <span
+              key={word}
+              onClick={() => handleRelatedClick(word)}
+              className="cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full"
+            >
+              {word}
+            </span>
+          ))}
         </div>
       )}
 
-      {filteredData.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border">
-            <thead className="bg-gray-100 text-gray-600">
-              <tr>
-                <th className="px-4 py-2 text-left">제목</th>
-                <th className="px-4 py-2 text-left">파일 경로</th>
-                <th className="px-4 py-2 text-center">기능</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 border-b">
-                  <td className="px-4 py-2 font-medium text-blue-600">{item.title}</td>
-                  <td className="px-4 py-2 text-gray-600">{item.summary}</td>
-                  <td className="text-center">
-                    <button
-                      onClick={() => handleDetail(item)}
-                      className="text-xs text-indigo-600 hover:underline mr-2"
-                    >
-                      상세보기
-                    </button>
-                    <button
-                      onClick={() => handleDownload(item)}
-                      className="text-xs text-green-600 hover:underline"
-                    >
-                      다운로드
-                    </button>
-                  </td>
+      {/* 결과 테이블 / 메시지 */}
+      {loading ? (
+        <p className="text-sm text-gray-500">데이터를 불러오는 중입니다…</p>
+      ) : filteredData.length ? (
+        <div className="border-t pt-6">
+          <h2 className="text-xl font-bold text-gray-700 mb-4">
+            {selectedCategory ?? '검색 결과'} 목록
+          </h2>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border">
+              <thead className="bg-gray-100 text-gray-600">
+                <tr>
+                  <th className="px-4 py-2 text-left">제목</th>
+                  <th className="px-4 py-2 text-left">설명</th>
+                  <th className="px-4 py-2">지역</th>
+                  <th className="px-4 py-2">유형</th>
+                  <th className="px-4 py-2">업로드일</th>
+                  <th className="px-4 py-2">기능</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredData.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50 border-b">
+                    <td className="px-4 py-2 font-medium text-blue-600">{item.title}</td>
+                    <td className="px-4 py-2 text-gray-600">{item.summary}</td>
+                    <td className="text-center">{item.region} {item.district}</td>
+                    <td className="text-center">{FILE_TYPE_MAP[item.type] || item.type}</td>
+                    <td className="text-center">{item.date}</td>
+                    <td className="text-center">
+                      <button onClick={() => alert(`상세 페이지 이동: ${item.title}`)}
+                              className="text-xs text-indigo-600 hover:underline mr-2">상세보기</button>
+                      <button onClick={() => handleDownload(item)}
+                              className="text-xs text-green-600 hover:underline">다운로드</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
-      )}
-      {selectedNumerical && (
-        <NumericalDownloads
-          tableName={selectedNumerical}
-          onClose={() => setSelectedNumerical(null)}
-        />
-      )}
-      {mergeTable && (
-        <MergeTablesModal
-          baseTable={mergeTable}
-          onClose={() => setMergeTable(null)}
-        />
       )}
     </div>
   );

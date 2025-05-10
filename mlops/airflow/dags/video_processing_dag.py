@@ -11,10 +11,9 @@ def process_and_save_intermediate(**context):
     conf = context["dag_run"].conf
     meta = conf["meta_path"]
     file = conf["file_path"]
-    file_type = conf["file_type"]
 
     data = process_video(file)
-    results = make_json_meta_file(data, meta, file_type)
+    results = make_json_meta_file(data, meta)
 
     results_path = f"/opt/airflow/files/{results['uuid']}_results.json"
     with open(results_path, "w") as f:
