@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { regionData } from '../data/regionData';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -8,6 +9,9 @@ export default function LoginPage() {
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [selectedRegion, setSelectedRegion] = useState('서울특별시');
+  const [selectedDistrict, setSelectedDistrict] = useState(regionData['서울특별시'][0]);
+
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -18,14 +22,15 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // 쿠키 저장 위해 필요
+        credentials: 'include',
         body: JSON.stringify({ username: email, password }),
       });
 
       const data = await res.json();
       if (res.ok) {
         console.log('✅ 로그인 성공', data);
-        navigate('/'); // 홈으로 이동
+        localStorage.setItem('selectedRegion', `${selectedRegion} ${selectedDistrict}`);
+        navigate('/');
       } else {
         alert(data.message || '로그인 실패');
       }
@@ -61,7 +66,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-blue-50 relative">
-      {/* 로그인 폼 */}
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md z-10">
         <h2 className="text-2xl font-bold text-center mb-6">로그인</h2>
         <form className="space-y-4" onSubmit={handleLogin}>
@@ -87,6 +91,33 @@ export default function LoginPage() {
               required
             />
           </div>
+          <div>
+            <label className="block mb-1 text-gray-700 font-medium">시/도</label>
+            <select
+              value={selectedRegion}
+              onChange={(e) => {
+                setSelectedRegion(e.target.value);
+                setSelectedDistrict(regionData[e.target.value][0]);
+              }}
+              className="w-full border border-gray-300 rounded px-4 py-2"
+            >
+              {Object.keys(regionData).map((region) => (
+                <option key={region} value={region}>{region}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 text-gray-700 font-medium">시/군/구</label>
+            <select
+              value={selectedDistrict}
+              onChange={(e) => setSelectedDistrict(e.target.value)}
+              className="w-full border border-gray-300 rounded px-4 py-2"
+            >
+              {regionData[selectedRegion].map((district) => (
+                <option key={district} value={district}>{district}</option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 transition"
@@ -102,13 +133,9 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* 회원가입 모달 */}
       {showSignup && (
         <>
-          <div
-            className="fixed inset-0 bg-black bg-opacity-40 z-20"
-            onClick={() => setShowSignup(false)}
-          />
+          <div className="fixed inset-0 bg-black bg-opacity-40 z-20" onClick={() => setShowSignup(false)} />
           <div className="fixed inset-0 z-30 flex justify-center items-center">
             <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
               <h3 className="text-xl font-bold mb-6">회원가입</h3>
