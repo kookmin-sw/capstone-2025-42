@@ -4,7 +4,7 @@ import json
 import olefile
 
 
-def make_json_meta_file(data, meta, file_type):
+def make_json_meta_file(data, meta):
     json_data = {}
     with open(meta) as f:
         json_data = json.load(f)
@@ -22,7 +22,6 @@ def make_json_meta_file(data, meta, file_type):
         )
     else:
         json_data["location"] = ""
-    json_data["file_type"] = file_type
     json_data["text"] = data["text"]
 
     return json_data

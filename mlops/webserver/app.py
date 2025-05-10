@@ -89,6 +89,11 @@ def token_required(f):
         except jwt.InvalidTokenError:
             return jsonify({"message": "유효하지 않은 토큰입니다"}), 401
 
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
+            if cur.fetchone() is None:
+                return jsonify({"message": "유효하지 않은 토큰입니다"}), 401
+
         return f(user_id, username, *args, **kwargs)
 
     return decorated
@@ -171,6 +176,35 @@ def get_region_file_count():
     ), 200
 
 
+@app.route("/api/archive_metrics", methods=["GET"])
+def archive_metrics():
+    """
+    {
+      "status": "success",
+      "total": 1200,
+      "completed": 1050,
+      "in_progress": 150,
+      "completion_rate": 87.5        # (%) 소수 첫째자리
+    }
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+          COUNT(*) FILTER (WHERE status = 'progress') AS in_progress
+        FROM uploaded_file;
+        """
+    )
+    row = cur.fetchone()
+    total = row["total"] or 0
+    completed = row["completed"] or 0
+    rate = round(completed / total * 100, 1) if total else 0.0
+    row["completion_rate"] = rate
+    return jsonify({"status": "success", **row}), 200
+
+
 @app.route("/region_uploads", methods=["GET"])
 def region_uploads():
     """
@@ -229,6 +263,36 @@ def village_uploads():
     )
     rows = cur.fetchall()
     return jsonify({"status": "success", "data": rows}), 200
+
+
+@app.route("/api/random_story", methods=["GET"])
+def random_story():
+    """
+    응답 예:
+    {
+      "status": "success",
+      "title": "포천 마을회관의 옛 사진 기록",
+      "description": "포천시 주민들이 기증한 자료로 구성된 영상 데이터"
+    }
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT file_name, description
+        FROM   uploaded_file
+        WHERE  description IS NOT NULL AND description <> ''
+        ORDER  BY RANDOM()
+        LIMIT 1;
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        return jsonify({"status": "empty"}), 200
+
+    title = os.path.splitext(row["file_name"])[0]
+    desc  = row["description"].split("|")[-1].strip()
+
+    return jsonify({"status": "success", "title": title, "description": desc}), 200
 
 
 @app.route("/api/regions", methods=["GET"])
@@ -303,6 +367,12 @@ def delete_account(user_id, username):
         samesite="Lax",
     )
     return response
+
+
+@app.route("/api/me")
+@token_required
+def me(user_id, username):
+    return jsonify({"logged_in": True, "user_id": user_id, "username": username}), 200
 
 
 @app.route("/api/login", methods=["POST"])
@@ -487,8 +557,7 @@ def upload(user_id, username):
 
 
 @app.route("/get_categories", methods=["GET"])
-@token_required
-def get_categories(user_id, username):
+def get_categories():
     query = """
     SELECT category AS name, COUNT(*) AS count
     FROM uploaded_file

@@ -58,16 +58,17 @@ CREATE TABLE IF NOT EXISTS users (
 create_uploaded_file_sql = """
 CREATE TABLE IF NOT EXISTS uploaded_file (
     file_id SERIAL PRIMARY KEY,
-    file_name TEXT NOT NULL,
-    file_type TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    file_period TEXT NOT NULL,
-    uuid TEXT NOT NULL,
+    file_name TEXT,
+    file_type TEXT,
+    file_path TEXT,
+    file_period TEXT,
+    uuid TEXT NOT NULL UNIQUE,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     uploader_id INTEGER REFERENCES users(user_id),
     description TEXT,
     location TEXT,
     category TEXT,
+    status TEXT NOT NULL,
     village_id INTEGER REFERENCES village(village_id)
 );
 """

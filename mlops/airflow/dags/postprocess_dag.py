@@ -34,55 +34,23 @@ def save_to_db(**context):
 
     cur.execute(
         """
-        INSERT INTO uploaded_file (
-            file_name, file_type, file_path, file_period, uuid,
-            uploaded_at, description, uploader_id, location, category, village_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING file_id;
-        """,
-        (
-            meta_data["file_name"],
-            meta_data["file_type"],
-            file_path,
+    	UPDATE uploaded_file
+    	SET
+            file_period = %s,
+            description = %s,
+            location    = %s,
+            status      = %s
+    	WHERE uuid = %s;
+    	""",
+    	(
             meta_data["datetime"],
-            meta_data["uuid"],
-            meta_data["upload_time"],
             final_text,
-            meta_data["user_id"],
             meta_data["location"],
-            meta_data["category"],
-            meta_data["current_village_id"]
-        ),
+            "completed",
+            meta_data["uuid"],
+    	),
     )
-    file_id = cur.fetchone()[0]
-
-    insert_sql = """
-        INSERT INTO tags (tag_name, description)
-        VALUES (%s, %s)
-        ON CONFLICT (tag_name) DO NOTHING;
-    """
-    tags = meta_data["tags"].split(",")
-    tag_values = [(tag.strip(), "") for tag in tags]
-    cur.executemany(insert_sql, tag_values)
     conn.commit()
-
-    if meta_data["tags"] != "":
-        placeholders = ",".join(["%s"] * len(tags))
-        cur.execute(
-            f"SELECT tag_id, tag_name FROM tags WHERE tag_name IN ({placeholders})",
-            tags,
-        )
-        rows = cur.fetchall()
-        tag_map = {name: tag_id for tag_id, name in rows}
-        for tag in tags:
-            tag_id = tag_map.get(tag)
-            if tag_id:
-                cur.execute(
-                    "INSERT INTO file_tags (file_id, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
-                    (file_id, tag_id),
-                )
-        conn.commit()
-
     cur.close()
     conn.close()
     os.remove(result_path)
