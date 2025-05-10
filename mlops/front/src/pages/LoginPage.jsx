@@ -19,8 +19,6 @@ export default function LoginPage() {
   const [signupName,     setSignupName]     = useState('');
   const [signupEmail,    setSignupEmail]    = useState('');
   const [signupPassword, setSignupPassword] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('서울특별시');
-  const [selectedDistrict, setSelectedDistrict] = useState(regionData['서울특별시'][0]);
 
   const navigate    = useNavigate();
   const showMessage = (m) => alert(m);

@@ -89,7 +89,7 @@ def get_file_type_by_magic(filepath):
                 elif any(name.endswith("ppt/presentation.xml") for name in names):
                     return "text"
                 elif any(name.endswith("xl/workbook.xml") for name in names):
-                    return "excel"
+                    return "text"
         except:
             pass
     elif (
@@ -125,8 +125,10 @@ def get_file_type_by_magic(filepath):
     elif mime_type in [
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-office",
+        "application/xls",
     ]:
-        return "excel"
+        return "text"
     elif is_pdf(filepath):
         return "text"
     elif is_doc_ppt_hwp(filepath):

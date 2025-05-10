@@ -624,27 +624,47 @@ def search():
     order_string = request.args.get("order", "")
     date_string = request.args.get("date", "all")  # all, today, week
     exp_string = request.args.get("exp", "")  # text, video, ...
+    
+    keywords = keyword_string.split()
+    result = None
 
+    # 정렬 기준
+    if order_string == "name":
+        order_by = "ORDER BY file_name ASC"
+    elif order_string == "recent":
+        order_by = "ORDER BY uploaded_at DESC"
+    else:
+        order_by = "ORDER BY file_name ASC"
+
+    # 조건 모음
     conditions = []
     params = []
-
-    for kw in keyword.split():
+    
+    # 키워드 검색
+    for kw in keywords:
+        pattern = f"%{kw}%"
         conditions.append("(file_name ILIKE %s OR COALESCE(description, '') ILIKE %s)")
-        params.extend([f"%{kw}%", f"%{kw}%"])
+        params.extend([pattern, pattern])
 
-    if date_filter == "today":
+    # 날짜 필터링
+    if date_string == "today":
+        today = datetime.utcnow().date()
         conditions.append("DATE(uploaded_at) = %s")
-        params.append(datetime.utcnow().date())
-    elif date_filter == "week":
+        params.append(today)
+    elif date_string == "week":
+        week_ago = datetime.utcnow().date() - timedelta(days=7)
         conditions.append("DATE(uploaded_at) >= %s")
-        params.append(datetime.utcnow().date() - timedelta(days=7))
+        params.append(week_ago)
 
-    if exp and exp != "all":
+    # 확장자/파일타입 필터링
+    if exp_string and exp_string != "all":
         conditions.append("file_type = %s")
-        params.append(exp)
+        params.append(exp_string)
 
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    order_sql = "uploaded_at DESC" if order == "recent" else "file_name ASC"
+    # WHERE 절 조립
+    where_clause = ""
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
 
     # 최종 쿼리 조립
     query = f"""
@@ -689,7 +709,7 @@ def search():
                 "file_path": row[0],
             })
 
-    return jsonify({"results": results})
+    return jsonify({"results": results, "related_word": related_word})
 
 
 @app.route("/search_numerical", methods=["GET"])
