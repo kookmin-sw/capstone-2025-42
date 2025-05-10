@@ -40,7 +40,7 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 "source": "KMA",  # 또는 적절한 출처 입력
                 "row_count": row_count,
                 "columns": json.dumps(col_list),
-                "is_empty": is_empty
+                "is_empty": is_empty,
             },
         )
 

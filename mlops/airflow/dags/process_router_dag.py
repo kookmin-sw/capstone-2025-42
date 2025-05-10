@@ -51,7 +51,7 @@ with DAG(
         # 메타/파일 다운로드
         meta_path, file_path = download_meta_and_file(client, bucket, key)
         file_type = get_file_type_by_magic(file_path)
-        
+
         meta_data = {}
         with open(meta_path) as f:
             meta_data = json.load(f)
@@ -73,20 +73,22 @@ with DAG(
                 uploaded_at, uploader_id, category, status, village_id
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     	    RETURNING file_id;
-            """, (
-            meta_data["file_name"],
-            file_type,
-            real_file_path,
-            meta_data["uuid"],
-            description,
-            meta_data["upload_time"],
-            meta_data["user_id"],
-            meta_data["category"],
-            "progress",
-            meta_data["current_village_id"]),
+            """,
+            (
+                meta_data["file_name"],
+                file_type,
+                real_file_path,
+                meta_data["uuid"],
+                description,
+                meta_data["upload_time"],
+                meta_data["user_id"],
+                meta_data["category"],
+                "progress",
+                meta_data["current_village_id"],
+            ),
         )
         file_id = cur.fetchone()[0]
-        
+
         insert_sql = """
             INSERT INTO tags (tag_name, description)
             VALUES (%s, %s)

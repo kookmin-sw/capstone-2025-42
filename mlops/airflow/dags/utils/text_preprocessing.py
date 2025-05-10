@@ -97,7 +97,7 @@ def get_file_ctime_created_date(path):
 def extract_xlsx(filepath):
     wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
     chunks = []
-    for ws in wb.worksheets:               # 모든 시트 순회
+    for ws in wb.worksheets:  # 모든 시트 순회
         for row in ws.iter_rows(values_only=True):
             for value in row:
                 if value not in (None, ""):

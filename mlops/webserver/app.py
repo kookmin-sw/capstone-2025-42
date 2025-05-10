@@ -28,7 +28,7 @@ from collections import Counter, defaultdict
 
 
 app = Flask(__name__, static_folder="dist", static_url_path="")
-CORS(app, origins="http://localhost:5173", supports_credentials=True) 
+CORS(app, origins="http://localhost:5173", supports_credentials=True)
 
 
 def load_secret(name, default=""):
@@ -71,6 +71,7 @@ else:
 
 DB_URI = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@postgres:5432/airflow"
 engine = create_engine(DB_URI)
+
 
 def token_required(f):
     @wraps(f)
@@ -136,16 +137,19 @@ def get_region_file_count_auth(user_id, username):
     )
     type_counts = {ftype: cnt for ftype, cnt in cur.fetchall()}
 
-    return jsonify(
-        {
-            "status": "success",
-            "village_id": village_id,
-            "region": region,
-            "district": district,
-            "total": total_cnt,
-            "type_counts": type_counts,
-        }
-    ), 200
+    return (
+        jsonify(
+            {
+                "status": "success",
+                "village_id": village_id,
+                "region": region,
+                "district": district,
+                "total": total_cnt,
+                "type_counts": type_counts,
+            }
+        ),
+        200,
+    )
 
 
 @app.route("/region_file_count", methods=["GET"])
@@ -164,16 +168,19 @@ def get_region_file_count():
     )
     type_counts = {ftype: cnt for ftype, cnt in cur.fetchall()}
 
-    return jsonify(
-        {
-            "status": "success",
-            "village_id": None,
-            "region": "시도(전체)",
-            "district": "시군구(전체)",
-            "total": total_cnt,
-            "type_counts": type_counts,
-        }
-    ), 200
+    return (
+        jsonify(
+            {
+                "status": "success",
+                "village_id": None,
+                "region": "시도(전체)",
+                "district": "시군구(전체)",
+                "total": total_cnt,
+                "type_counts": type_counts,
+            }
+        ),
+        200,
+    )
 
 
 @app.route("/api/archive_metrics", methods=["GET"])
@@ -290,14 +297,14 @@ def random_story():
         return jsonify({"status": "empty"}), 200
 
     title = os.path.splitext(row["file_name"])[0]
-    desc  = row["description"].split("|")[-1].strip()
+    desc = row["description"].split("|")[-1].strip()
 
     return jsonify({"status": "success", "title": title, "description": desc}), 200
 
 
 @app.route("/api/regions", methods=["GET"])
 def get_regions():
-    cur  = conn.cursor()
+    cur = conn.cursor()
     cur.execute("SELECT region, district FROM village ORDER BY region, district;")
     rows = cur.fetchall()
 
@@ -385,10 +392,10 @@ def login():
     if missing:
         return jsonify({"message": f"누락 필드: {', '.join(missing)}"}), 400
 
-    email   = data["email"]
-    password   = data["password"]
-    region     = data["region"]
-    district   = data["district"]
+    email = data["email"]
+    password = data["password"]
+    region = data["region"]
+    district = data["district"]
 
     # 2) 사용자 조회
     with conn.cursor() as cur:
@@ -407,13 +414,12 @@ def login():
     # 3) 지역(village) 지정/변경
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT village_id FROM village "
-            "WHERE region = %s AND district = %s",
+            "SELECT village_id FROM village " "WHERE region = %s AND district = %s",
             (region, district),
         )
         village_row = cur.fetchone()
 
-        if village_row:                       # 유효한 지역만 업데이트
+        if village_row:  # 유효한 지역만 업데이트
             cur.execute(
                 "UPDATE users SET current_village_id = %s WHERE user_id = %s",
                 (village_row[0], user_id),
@@ -430,8 +436,7 @@ def login():
 
     resp = make_response(jsonify({"message": "로그인 성공"}))
     resp.set_cookie(
-        "token", token,
-        httponly=True, secure=False, samesite="Lax", max_age=3600
+        "token", token, httponly=True, secure=False, samesite="Lax", max_age=3600
     )
     return resp
 
@@ -505,12 +510,12 @@ def upload(user_id, username):
         # 3-1) 개별 메타 가져오기
         meta = meta_list[idx] if idx < len(meta_list) else {}
         description = meta.get("description", "")
-        tags        = meta.get("tags", "")
-        category    = meta.get("category", "")
+        tags = meta.get("tags", "")
+        category = meta.get("category", "")
 
-        file_name  = file.filename
+        file_name = file.filename
         base_name, ext = os.path.splitext(file_name)
-        uuid_val   = str(uuid4())
+        uuid_val = str(uuid4())
 
         file_key = f"{base_name}_{uuid_val}{ext}"
         json_key = f"meta/{base_name}_{uuid_val}.json"
@@ -522,13 +527,13 @@ def upload(user_id, username):
         file.save(file_path)
 
         json_data = {
-            "description":        description,
-            "tags":               tags,
-            "category":           category,
-            "file_name":          file_name,
-            "uuid":               uuid_val,
-            "upload_time":        now,
-            "user_id":            user_id,
+            "description": description,
+            "tags": tags,
+            "category": category,
+            "file_name": file_name,
+            "uuid": uuid_val,
+            "upload_time": now,
+            "user_id": user_id,
             "current_village_id": current_village_id,
         }
 
@@ -545,11 +550,11 @@ def upload(user_id, username):
 
         saved_files.append(
             {
-                "file_name":  file_name,
-                "title":      base_name,
+                "file_name": file_name,
+                "title": base_name,
                 "description": description,
-                "uuid":       uuid_val,
-                "time":       now,
+                "uuid": uuid_val,
+                "time": now,
             }
         )
 
@@ -600,7 +605,7 @@ def search_by_category(user_id, username):
     with conn.cursor() as cur:
         cur.execute(query, (category,))
         rows = cur.fetchall()
-    
+
     result = [
         {
             "id": row[3],
@@ -624,7 +629,7 @@ def search():
     order_string = request.args.get("order", "")
     date_string = request.args.get("date", "all")  # all, today, week
     exp_string = request.args.get("exp", "")  # text, video, ...
-    
+
     keywords = keyword_string.split()
     result = None
 
@@ -639,7 +644,7 @@ def search():
     # 조건 모음
     conditions = []
     params = []
-    
+
     # 키워드 검색
     for kw in keywords:
         pattern = f"%{kw}%"
@@ -698,16 +703,18 @@ def search():
         related_word = [word for word, _ in related_word_set_list]
         for row in rows:
             category = row[8]
-            results[category].append({
-                "id": row[3],
-                "title": row[0].replace(f"_{row[1]}", ""),
-                "summary": row[2].split("|")[-1],
-                "region": row[4],
-                "district": row[5],
-                "date": row[6],
-                "type": row[7],
-                "file_path": row[0],
-            })
+            results[category].append(
+                {
+                    "id": row[3],
+                    "title": row[0].replace(f"_{row[1]}", ""),
+                    "summary": row[2].split("|")[-1],
+                    "region": row[4],
+                    "district": row[5],
+                    "date": row[6],
+                    "type": row[7],
+                    "file_path": row[0],
+                }
+            )
 
     return jsonify({"results": results, "related_word": related_word})
 
@@ -768,10 +775,9 @@ def preview_numerical():
 
     query = f'SELECT * FROM "{table_name}" LIMIT 5'
     df = pd.read_sql(query, engine)
-    return jsonify({
-        "columns": list(df.columns),
-        "preview": df.to_dict(orient="records")
-    })
+    return jsonify(
+        {"columns": list(df.columns), "preview": df.to_dict(orient="records")}
+    )
 
 
 @app.route("/download_numerical", methods=["GET"])
@@ -783,7 +789,7 @@ def download_numerical():
         return {"error": "Missing table_name"}, 400
 
     if columns:
-        quoted_columns = ', '.join([f'"{col.strip()}"' for col in columns.split(',')])
+        quoted_columns = ", ".join([f'"{col.strip()}"' for col in columns.split(",")])
         col_clause = f"{quoted_columns}"
     else:
         col_clause = "*"
@@ -893,10 +899,9 @@ def preview_merge_table():
     query = f"SELECT * FROM {table_name} LIMIT 5"
     try:
         df = pd.read_sql(query, engine)
-        return jsonify({
-            "columns": list(df.columns),
-            "preview": df.to_dict(orient="records")
-        })
+        return jsonify(
+            {"columns": list(df.columns), "preview": df.to_dict(orient="records")}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -924,7 +929,9 @@ def download_merge():
         if how == "concat_v":
             df_merged = pd.concat([df1, df2], axis=0)
         elif how == "concat_h":
-            df_merged = pd.concat([df1.reset_index(drop=True), df2.reset_index(drop=True)], axis=1)
+            df_merged = pd.concat(
+                [df1.reset_index(drop=True), df2.reset_index(drop=True)], axis=1
+            )
         else:
             if not on:
                 return {"error": "조인 기준 컬럼이 필요합니다."}, 400

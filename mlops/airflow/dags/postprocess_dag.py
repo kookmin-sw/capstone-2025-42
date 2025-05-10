@@ -42,13 +42,13 @@ def save_to_db(**context):
             status      = %s
     	WHERE uuid = %s;
     	""",
-    	(
+        (
             meta_data["datetime"],
             final_text,
             meta_data["location"],
             "completed",
             meta_data["uuid"],
-    	),
+        ),
     )
     conn.commit()
     cur.close()
