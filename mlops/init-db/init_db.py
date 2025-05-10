@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     location TEXT,
     category TEXT,
     status TEXT NOT NULL,
-    village_id INTEGER REFERENCES village(village_id)
+    village_id INTEGER REFERENCES village(village_id),
+    thumbnail_path TEXT
 );
 """
 
@@ -88,21 +89,6 @@ CREATE TABLE IF NOT EXISTS file_tags (
     file_id INTEGER REFERENCES uploaded_file(file_id) ON DELETE CASCADE,
     tag_id INTEGER REFERENCES tags(tag_id) ON DELETE CASCADE,
     PRIMARY KEY (file_id, tag_id)
-);
-"""
-
-create_numerical_meta_sql = """
-CREATE TABLE IF NOT EXISTS numerical_meta (
-    numerical_id SERIAL PRIMARY KEY,
-    table_name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    year INTEGER,
-    month INTEGER,
-    source TEXT DEFAULT 'KMA',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    row_count INTEGER,
-    columns TEXT,
-    is_empty BOOLEAN DEFAULT FALSE
 );
 """
 
@@ -356,7 +342,6 @@ try:
     cur.execute(create_uploaded_file_sql)
     cur.execute(create_tags_sql)
     cur.execute(create_file_tags_sql)
-    cur.execute(create_numerical_meta_sql)
 
     print("✅ 테이블 생성 완료")
 

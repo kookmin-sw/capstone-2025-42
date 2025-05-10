@@ -319,7 +319,13 @@ def get_regions():
 
 @app.route("/api/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    required = ("name", "email", "password")
+    missing = [f for f in required if f not in data or not data[f]]
+    if missing:
+        return jsonify({"message": f"누락된 필드: {', '.join(missing)}"}), 400
+
     username = data["name"]
     email = data["email"]
     password = data["password"]
@@ -336,6 +342,9 @@ def register():
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
         return jsonify({"message": "이미 존재하는 사용자입니다"}), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"등록 실패: {str(e)}"}), 500
     finally:
         cur.close()
 
@@ -358,10 +367,15 @@ def delete_account(user_id, username):
         return jsonify({"message": "유효하지 않은 토큰입니다"}), 401
 
     # DB 연결 및 유저 삭제
-    cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
-    conn.commit()
-    cur.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"계정 삭제 실패: {str(e)}"}), 500
+    finally:
+        cur.close()
 
     # 쿠키 제거
     response = make_response(jsonify({"message": "계정 삭제 완료"}))
@@ -412,19 +426,23 @@ def login():
     user_id = row[0]
 
     # 3) 지역(village) 지정/변경
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT village_id FROM village " "WHERE region = %s AND district = %s",
-            (region, district),
-        )
-        village_row = cur.fetchone()
-
-        if village_row:  # 유효한 지역만 업데이트
+    try:
+        with conn.cursor() as cur:
             cur.execute(
-                "UPDATE users SET current_village_id = %s WHERE user_id = %s",
-                (village_row[0], user_id),
+                "SELECT village_id FROM village " "WHERE region = %s AND district = %s",
+                (region, district),
             )
+            village_row = cur.fetchone()
+
+            if village_row:  # 유효한 지역만 업데이트
+                cur.execute(
+                    "UPDATE users SET current_village_id = %s WHERE user_id = %s",
+                    (village_row[0], user_id),
+                )
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"로그인 실패: {str(e)}"}), 500
 
     # 4) JWT 발급 & 쿠키 설정
     payload = {
@@ -568,13 +586,18 @@ def get_categories():
     FROM uploaded_file
     WHERE category IS NOT NULL
     GROUP BY category
-    ORDER BY count DESC
     """
     with conn.cursor() as cur:
         cur.execute(query)
         rows = cur.fetchall()
-        result = [{"name": name, "count": count} for name, count in rows]
 
+    category_counter = {}
+
+    for name, count in rows:
+        category_counter[name] = category_counter.get(name, 0) + count
+
+    result = [{"name": name, "count": count}
+              for name, count in sorted(category_counter.items(), key=lambda x: -x[1])]
     return jsonify(result)
 
 
@@ -595,7 +618,8 @@ def search_by_category(user_id, username):
         v.region,
         v.district,
         uf.uploaded_at,
-        uf.file_type
+        uf.file_type,
+        uf.file_name
     FROM uploaded_file uf
     LEFT JOIN village v ON uf.village_id = v.village_id
     WHERE uf.category = %s
@@ -609,7 +633,7 @@ def search_by_category(user_id, username):
     result = [
         {
             "id": row[3],
-            "title": row[0].replace(f"_{row[1]}", ""),
+            "title": row[9] or "",
             "summary": row[2].split("|")[-1],
             "region": row[4],
             "district": row[5],
@@ -631,7 +655,6 @@ def search():
     exp_string = request.args.get("exp", "")  # text, video, ...
 
     keywords = keyword_string.split()
-    result = None
 
     # 정렬 기준
     if order_string == "name":
@@ -682,7 +705,8 @@ def search():
           v.district,
           uf.uploaded_at,
           uf.file_type,
-          uf.category
+          uf.category,
+          uf.file_name
         FROM uploaded_file uf
         LEFT JOIN village v ON uf.village_id = v.village_id
         {where_clause}
@@ -706,65 +730,18 @@ def search():
             results[category].append(
                 {
                     "id": row[3],
-                    "title": row[0].replace(f"_{row[1]}", ""),
-                    "summary": row[2].split("|")[-1],
-                    "region": row[4],
-                    "district": row[5],
-                    "date": row[6],
+                    "title": row[9] or "",
+                    "summary": row[2].split("|")[-1] if row[2] else "",
+                    "region": row[4] or "-",
+                    "district": row[5] or "-",
+                    "date": row[6].isoformat() if row[6] else "-",
                     "type": row[7],
-                    "file_path": row[0],
+                    "file_path": row[0] or "",
+                    "table_name": row[0] if row[7] == "numerical" else None
                 }
             )
 
     return jsonify({"results": results, "related_word": related_word})
-
-
-@app.route("/search_numerical", methods=["GET"])
-def search_numerical():
-    word = request.args.get("word", "")
-    category = request.args.get("category")
-    year = request.args.get("year")
-    month = request.args.get("month")
-
-    conditions = []
-    params = {}
-
-    if word:
-        conditions.append("(table_name ILIKE :kw OR category ILIKE :kw)")
-        params["kw"] = f"%{word}%"
-    if category:
-        conditions.append("category = :category")
-        params["category"] = category
-    if year:
-        conditions.append("year = :year")
-        params["year"] = int(year)
-    if month:
-        conditions.append("month = :month")
-        params["month"] = int(month)
-
-    where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-    query = f"""
-        SELECT table_name, category, year, month, is_empty
-        FROM numerical_meta
-        {where_sql}
-        ORDER BY year DESC, month DESC
-    """
-
-    with engine.connect() as con:
-        result = con.execute(text(query), params).mappings()
-        rows = [
-            {
-                "table_name": row["table_name"],
-                "category": row["category"],
-                "year": row["year"],
-                "month": row["month"],
-                "is_empty": row["is_empty"],
-            }
-            for row in result
-        ]
-
-    return jsonify({"results": rows})
 
 
 @app.route("/preview_numerical", methods=["GET"])
@@ -775,40 +752,10 @@ def preview_numerical():
 
     query = f'SELECT * FROM "{table_name}" LIMIT 5'
     df = pd.read_sql(query, engine)
+
     return jsonify(
         {"columns": list(df.columns), "preview": df.to_dict(orient="records")}
     )
-
-
-@app.route("/download_numerical", methods=["GET"])
-def download_numerical():
-    table_name = request.args.get("table_name")
-    columns = request.args.get("columns")  # "col1,col2"
-
-    if not table_name:
-        return {"error": "Missing table_name"}, 400
-
-    if columns:
-        quoted_columns = ", ".join([f'"{col.strip()}"' for col in columns.split(",")])
-        col_clause = f"{quoted_columns}"
-    else:
-        col_clause = "*"
-
-    query = f'SELECT {col_clause} FROM "{table_name}"'
-    df = pd.read_sql(query, engine)
-
-    path = f"/tmp/{table_name}_all.csv"
-    df.to_csv(path, index=False)
-
-    @after_this_request
-    def cleanup(response):
-        try:
-            os.remove(path)
-        except:
-            pass
-        return response
-
-    return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
 
 
 @app.route("/download_numerical_filtered", methods=["GET"])
@@ -822,7 +769,9 @@ def download_numerical_filtered():
 
     col_clause = "*"
     if columns:
-        col_clause = ", ".join([f'"{col.strip()}"' for col in columns.split(",")])
+        col_list = [col.strip() for col in columns.split(",") if col.strip()]
+        if col_list:
+            col_clause = ", ".join([f'"{col}"' for col in col_list])
 
     order_clause = ""
     if sort:
@@ -830,11 +779,13 @@ def download_numerical_filtered():
             sort_items = []
             for s in sort.split(","):
                 col, dir = s.split(":")
+                col = col.strip()
+                dir = dir.strip()
                 if dir.lower() in ["asc", "desc"]:
-                    sort_items.append(f'"{col.strip()}" {dir.upper()}')
+                    sort_items.append(f'"{col}" {dir}')
             if sort_items:
                 order_clause = " ORDER BY " + ", ".join(sort_items)
-        except:
+        except Exception:
             return {"error": "Invalid sort format"}, 400
 
     query = f'SELECT {col_clause} FROM "{table_name}"{order_clause}'
@@ -868,13 +819,20 @@ def download(user_id, username):
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT file_path FROM uploaded_file WHERE file_path = %s",
+            """
+            SELECT file_path, file_type, file_name 
+            FROM uploaded_file 
+            WHERE file_path = %s
+            """,
             (unquote(file_path),),
         )
         row = cur.fetchone()
         if not row:
             return {"error": "File not found"}, 404
-        file_path = row[0]
+        file_path, file_type, file_name = row
+
+    if file_type == "numerical":
+        return jsonify({"popup_required": True}), 200
 
     local_path = f"/tmp/{os.path.basename(file_path)}"
     minio_client.fget_object(BUCKET_NAME, file_path, local_path)
@@ -887,7 +845,7 @@ def download(user_id, username):
             pass
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=title)
+    return send_file(local_path, as_attachment=True, download_name=title or os.path.basename(file_name))
 
 
 @app.route("/preview_merge_table", methods=["GET"])

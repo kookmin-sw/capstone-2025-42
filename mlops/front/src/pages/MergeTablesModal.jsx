@@ -19,7 +19,7 @@ function MergeTablesModal({ baseTable, onClose }) {
 
   useEffect(() => {
     if (!baseTable?.table_name) return;
-    fetch(`/preview_numerical?table_name=${encodeURIComponent(baseTable.table_name)}`)
+    fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?table_name=${encodeURIComponent(baseTable.table_name)}`)
       .then(res => res.json())
       .then(data => {
         setBaseColumns(data.columns);
@@ -30,7 +30,7 @@ function MergeTablesModal({ baseTable, onClose }) {
 
   useEffect(() => {
     if (!targetTable) return;
-    fetch(`/preview_numerical?table_name=${encodeURIComponent(targetTable)}`)
+    fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?table_name=${encodeURIComponent(targetTable)}`)
       .then(res => res.json())
       .then(data => {
         setTargetColumns(data.columns);
@@ -46,7 +46,13 @@ function MergeTablesModal({ baseTable, onClose }) {
   const handleDownload = () => {
     const baseCols = Array.from(baseSelected);
     const targetCols = Array.from(targetSelected);
-    const url = `/download_merge?base=${baseTable.table_name}&target=${targetTable}&join_type=${joinType}&join_key=${joinKey}&base_cols=${baseCols.join(',')}&target_cols=${targetCols.join(',')}`;
+    const url = `${import.meta.env.VITE_API_BASE}/download_merge` +
+      `?base=${baseTable.table_name}` +
+      `&target=${targetTable}` +
+      `&join_type=${joinType}` +
+      `&join_key=${joinKey}` +
+      `&base_cols=${encodeURIComponent(baseCols.join(','))}` +
+      `&target_cols=${encodeURIComponent(targetCols.join(','))}`;
     window.open(url, '_blank');
   };
 
@@ -109,15 +115,28 @@ function MergeTablesModal({ baseTable, onClose }) {
             style={{ flex: 1 }}
           />
           <button onClick={() => {
-            fetch(`/search_numerical?word=${encodeURIComponent(searchKeyword)}`)
+            fetch(`${import.meta.env.VITE_API_BASE}/search?word=${encodeURIComponent(searchKeyword)}`)
               .then(res => res.json())
-              .then(data => setSearchResults(data.results || []));
+              .then(data => {
+                console.log("🔍 검색 결과 상세:", JSON.stringify(data.results, null, 2));
+                const results = data.results || {};
+                const numericalResults = Object.entries(results).flatMap(([category, items]) =>
+                  items
+                    .filter(item => item.type === 'numerical')
+                    .map(item => ({
+                      table_name: item.title || 'Unknown Table'  // ✅ 확실하게 표시될 값 보장
+                    }))
+                );
+
+                console.log("🔍 최종 처리된 검색 결과:", numericalResults);
+                setSearchResults(numericalResults);
+              });
           }}>검색</button>
         </div>
 
         {searchResults.map(item => (
           <button key={item.table_name} onClick={() => setTargetTable(item.table_name)}>
-            {item.table_name}
+            {item.table_name || 'None'}
           </button>
         ))}
 

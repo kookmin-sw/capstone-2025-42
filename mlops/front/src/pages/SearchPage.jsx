@@ -1,6 +1,8 @@
 // src/pages/SearchPage.jsx
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import NumericalDownloads from './NumericalDownloads.jsx';
+import MergeTablesModal from './MergeTablesModal.jsx';
 
 /* ─────────── 파일 유형 매핑 ─────────── */
 const FILE_TYPE_MAP = { text: '문서', video: '영상', image: '이미지' };
@@ -11,7 +13,7 @@ const sortOptions = ['제목순', '최신순', '지역순'];
 const CATEGORY_EMOJI_MAP = {
   건강: '🩺', 동물: '🐐', 식품: '🍽️', 문화: '🎭',
   생활: '🍳', 자원환경: '🌿', 기타: '➕',
-};
+  };
 
 /* ───── fetch 래퍼 (세션 쿠키만) ───── */
 const fetchWithSession = async (url, opts = {}) => {
@@ -50,6 +52,9 @@ export default function SearchPage() {
   const [selectedSort, setSelectedSort]         = useState('최신순');
   const [relatedWords, setRelatedWords]         = useState([]);
   const [loading, setLoading]                   = useState(false);
+  const [selectedNumerical, setSelectedNumerical] = useState(null);
+  const [mergeTable, setMergeTable]             = useState(null);
+  const [selectedFile, setSelectedFile]         = useState(null);
 
   const typeKor2Key = (kor) =>
     Object.entries(FILE_TYPE_MAP).find(([, v]) => v === kor)?.[0];
@@ -162,6 +167,22 @@ export default function SearchPage() {
     handleSearch(word);
   };
 
+  /* ✅ 상세보기 */
+  const handleDetail = async (item) => {
+    try {
+      await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
+    } catch {
+      alert('상세보기하려면 로그인이 필요합니다.');
+      return navigate('/login');
+    }
+    if (item.type === 'numerical') {
+      setMergeTable({ table_name: item.title }); // 머지 팝업 호출
+    } else {
+      console.log("📂 파일 상세 정보:", item);
+      alert('준비 중');
+    }
+  };
+
   /* ✅ 다운로드 */
   const handleDownload = async (item) => {
     try {
@@ -170,11 +191,16 @@ export default function SearchPage() {
       alert('다운로드하려면 로그인이 필요합니다.');
       return navigate('/login');
     }
-    const url =
-      `${import.meta.env.VITE_API_BASE}/download?` +
-      `file_path=${encodeURIComponent(item.file_path)}` +
-      `&title=${encodeURIComponent(item.title)}`;
-    window.open(url, '_blank');
+
+    if (item.type === 'numerical') {
+      setSelectedNumerical(item.title);
+    } else {
+      const url =
+        `${import.meta.env.VITE_API_BASE}/download?` +
+        `file_path=${encodeURIComponent(item.file_path)}` +
+        `&title=${encodeURIComponent(item.title)}`;
+      window.open(url, '_blank');
+    }
   };
 
   /* ─────────── UI ─────────── */
@@ -279,7 +305,7 @@ export default function SearchPage() {
                     <td className="text-center">{FILE_TYPE_MAP[item.type] || item.type}</td>
                     <td className="text-center">{item.date}</td>
                     <td className="text-center">
-                      <button onClick={() => alert(`상세 페이지 이동: ${item.title}`)}
+                      <button onClick={() => handleDetail(item)}
                               className="text-xs text-indigo-600 hover:underline mr-2">상세보기</button>
                       <button onClick={() => handleDownload(item)}
                               className="text-xs text-green-600 hover:underline">다운로드</button>
@@ -292,6 +318,28 @@ export default function SearchPage() {
         </div>
       ) : (
         <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
+      )}
+
+      {/* Numerical 팝업 렌더링 */}
+      {selectedNumerical && (
+        <NumericalDownloads
+          tableName={selectedNumerical}
+          onClose={() => setSelectedNumerical(null)}
+        />
+      )}
+      {/* Numerical 상세보기 팝업 렌더링 */}
+      {mergeTable && (
+        <MergeTablesModal
+          baseTable={mergeTable}
+          onClose={() => setMergeTable(null)}
+        />
+      )}
+      {/* 파일 상세보기 팝업 렌더링 */}
+      {selectedFile && (
+        <FilePreviewModal
+          file={selectedFile}
+          onClose={() => setSelectedFile(null)}
+        />
       )}
     </div>
   );
