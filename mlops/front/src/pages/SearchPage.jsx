@@ -10,7 +10,6 @@ const FILE_TYPE_MAP = {
   text:      '문서',
   video:     '영상',
   image:     '이미지',
-  numerical: '표(정형)',
 };
 const dataTypes   = ['전체', ...Object.values(FILE_TYPE_MAP)];
 const sortOptions = ['제목순', '최신순', '지역순'];
@@ -28,7 +27,7 @@ const fetchJSON = async (url, opts = {}) => {
   return r.json();
 };
 
-const isNumerical = (item) => item.type === 'numerical' || item.specific_type === 'numerical';
+const isNumerical = (item) => item.specific_type === 'numerical';
 
 export default function SearchPage() {
   const API = import.meta.env.VITE_API_BASE;
