@@ -32,5 +32,28 @@ mc event add $MINIO_ALIAS/$BUCKET_NAME arn:minio:sqs::$WEBHOOK_NAME:webhook \
   --prefix "meta/" \
   --suffix ".json" --quiet
 
-echo "MinIO webhook registration complete!"
+echo "Setting CORS..."
+cat >/tmp/cors.json <<'EOF'
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:5173",
+      "http://localhost:8792",
+      "https://view.officeapps.live.com"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range", "Authorization"],
+    "ExposeHeaders": [
+      "Accept-Ranges",
+      "Content-Range",
+      "Content-Length",
+      "ETag"
+    ],
+    "MaxAgeSeconds": 600
+  }
+]
+EOF
+mc admin bucket cors set $MINIO_ALIAS/$BUCKET_NAME /tmp/cors.json
+rm /tmp/cors.json
 
+echo "MinIO webhook registration complete!"

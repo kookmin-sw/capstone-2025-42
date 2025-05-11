@@ -808,6 +808,38 @@ def download_numerical_filtered():
     return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
 
 
+@app.route("/preview_url", methods=["GET"])
+def preview_url():
+    """
+    GET /preview_url?file_path=uploads/2025/05/foo_1234.png
+      → { "url": "<signed-url>", "file_type": "image" }
+    """
+    file_path = request.args.get("file_path")
+    if not file_path:
+        return jsonify({"error": "file_path query param required"}), 400
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT file_path, file_type FROM uploaded_file WHERE file_path = %s",
+            (unquote(file_path),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "File not found"}), 404
+        file_path_db, file_type = row
+
+    try:
+        presigned = minio_client.presigned_get_object(
+            BUCKET_NAME,
+            file_path_db,
+            expires=600,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"url": presigned, "file_type": file_type}), 200
+
+
 @app.route("/download", methods=["GET"])
 @token_required
 def download(user_id, username):
