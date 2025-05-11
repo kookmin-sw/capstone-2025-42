@@ -193,7 +193,8 @@ export default function SearchPage() {
     }
 
     if (item.type === 'numerical') {
-      setSelectedNumerical(item.title);
+      console.log("📢 전달되는 테이블:", item);
+      setSelectedNumerical(item);
     } else {
       const url =
         `${import.meta.env.VITE_API_BASE}/download?` +
@@ -323,7 +324,8 @@ export default function SearchPage() {
       {/* Numerical 팝업 렌더링 */}
       {selectedNumerical && (
         <NumericalDownloads
-          tableName={selectedNumerical}
+          tableName={selectedNumerical.table_name}
+          title={selectedNumerical.title}
           onClose={() => setSelectedNumerical(null)}
         />
       )}

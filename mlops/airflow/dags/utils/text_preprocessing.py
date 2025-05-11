@@ -94,30 +94,6 @@ def get_file_ctime_created_date(path):
         return ""
 
 
-def extract_xlsx(filepath):
-    wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
-    chunks = []
-    for ws in wb.worksheets:  # 모든 시트 순회
-        for row in ws.iter_rows(values_only=True):
-            for value in row:
-                if value not in (None, ""):
-                    chunks.append(str(value))
-    wb.close()
-    return "\n".join(chunks)
-
-
-def extract_xls(filepath):
-    book = xlrd.open_workbook(filepath, formatting_info=False)
-    chunks = []
-    for sheet in book.sheets():
-        for r in range(sheet.nrows):
-            for c in range(sheet.ncols):
-                val = sheet.cell_value(r, c)
-                if val not in ("", None):
-                    chunks.append(str(val))
-    return "\n".join(chunks)
-
-
 def extract_ppt_doc(filepath):
     from org.apache.poi.sl.extractor import SlideShowExtractor
     from org.apache.poi.extractor import ExtractorFactory
@@ -356,8 +332,6 @@ def process_text(filepath):
         "docx": extract_docx,
         "pptx": extract_pptx,
         "pdf": extract_pdf,
-        "xlsx": extract_xlsx,
-        "xls": extract_xls,
         "default": extract_default,
     }.get(ext)
 
@@ -369,8 +343,6 @@ def process_text(filepath):
         "docx": get_office_openxml_created_date,
         "pptx": get_office_openxml_created_date,
         "pdf": get_pdf_created_date,
-        "xls": get_ole_created_date,
-        "xlsx": get_office_openxml_created_date,
         "default": get_file_ctime_created_date,
     }.get(ext)
 

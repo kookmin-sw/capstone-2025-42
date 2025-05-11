@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-function NumericalDownloads({ tableName, onClose }) {
+function NumericalDownloads({ tableName, title, onClose }) {
   const [columns, setColumns] = useState([]);
   const [preview, setPreview] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -8,16 +8,19 @@ function NumericalDownloads({ tableName, onClose }) {
 
   useEffect(() => {
     if (!tableName) return;
-    fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?table_name=${encodeURIComponent(tableName)}`)
+    fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?` +
+            `table_name=${encodeURIComponent(tableName)}` +
+            `&title=${encodeURIComponent(title)}`)
       .then(res => res.json())
       .then(data => {
+        console.log("📢 전달되는 테이블명:", title);
         if (data.columns && data.preview) {
           setColumns(data.columns);
           setPreview(data.preview);
           setSelected(new Set(data.columns));
         }
       });
-  }, [tableName]);
+  }, [tableName, title]);
 
   const toggleColumn = (col) => {
     const updated = new Set(selected);
@@ -51,6 +54,7 @@ function NumericalDownloads({ tableName, onClose }) {
     const sortParams = sorts.map(s => `${s.col}:${s.order}`).join(',');
     const url = `${import.meta.env.VITE_API_BASE}/download_numerical_filtered` +
       `?table_name=${encodeURIComponent(tableName)}` +
+      `&title=${encodeURIComponent(title)}` +
       `&columns=${encodeURIComponent(cols.join(','))}` +
       `&sort=${encodeURIComponent(sortParams)}`;
     window.open(url, '_blank');
@@ -71,7 +75,7 @@ function NumericalDownloads({ tableName, onClose }) {
         overflow: 'auto',
       }}>
         <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
-          {tableName} - 컬럼 선택 및 정렬
+          {title} - 컬럼 선택 및 정렬
         </h3>
 
         <div style={{ overflowX: 'auto' }}>

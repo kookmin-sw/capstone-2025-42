@@ -23,3 +23,4 @@ psycopg2-binary
 JPype1
 openpyxl
 xlrd==1.2.0
+chardet

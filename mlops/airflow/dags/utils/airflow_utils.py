@@ -80,6 +80,8 @@ def get_file_type_by_magic(filepath):
     mime_type = mime.from_file(filepath)
     if is_hwpx(filepath):
         return "text"
+    elif filepath.lower().endswith(".csv"):
+        return "numerical"
     elif mime_type == "application/zip":
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
@@ -128,7 +130,7 @@ def get_file_type_by_magic(filepath):
         "application/vnd.ms-office",
         "application/xls",
     ]:
-        return "text"
+        return "numerical"
     elif is_pdf(filepath):
         return "text"
     elif is_doc_ppt_hwp(filepath):

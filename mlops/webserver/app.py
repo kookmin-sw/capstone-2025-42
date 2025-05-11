@@ -727,6 +727,7 @@ def search():
         related_word = [word for word, _ in related_word_set_list]
         for row in rows:
             category = row[8]
+            table_name = row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower()
             results[category].append(
                 {
                     "id": row[3],
@@ -737,7 +738,7 @@ def search():
                     "date": row[6].isoformat() if row[6] else "-",
                     "type": row[7],
                     "file_path": row[0] or "",
-                    "table_name": row[0] if row[7] == "numerical" else None
+                    "table_name": table_name if row[7] == "numerical" else None
                 }
             )
 
@@ -747,11 +748,16 @@ def search():
 @app.route("/preview_numerical", methods=["GET"])
 def preview_numerical():
     table_name = request.args.get("table_name")
+    title = request.args.get("title")
+
     if not table_name:
         return {"error": "Missing table_name"}, 400
 
     query = f'SELECT * FROM "{table_name}" LIMIT 5'
-    df = pd.read_sql(query, engine)
+    try:
+        df = pd.read_sql(query, engine)
+    except Exception as e:
+        return jsonify({"error": f"Query Failed: {str(e)}", "query": query}), 500
 
     return jsonify(
         {"columns": list(df.columns), "preview": df.to_dict(orient="records")}
@@ -761,8 +767,9 @@ def preview_numerical():
 @app.route("/download_numerical_filtered", methods=["GET"])
 def download_numerical_filtered():
     table_name = request.args.get("table_name")
-    columns = request.args.get("columns")  # "col1,col2"
-    sort = request.args.get("sort")  # "col1:asc,col2:desc"
+    title = request.args.get("title")
+    columns = request.args.get("columns")
+    sort = request.args.get("sort")
 
     if not table_name:
         return {"error": "Missing table_name"}, 400
@@ -794,8 +801,8 @@ def download_numerical_filtered():
     except Exception as e:
         return {"error": str(e)}, 500
 
-    path = f"/tmp/{table_name}_filtered.csv"
-    df.to_csv(path, index=False)
+    path = f"/tmp/{table_name}_filtered"
+    df.to_csv(path, index=False, encoding="utf-8-sig")
 
     @after_this_request
     def cleanup(response):
@@ -805,7 +812,7 @@ def download_numerical_filtered():
             pass
         return response
 
-    return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
+    return send_file(path, as_attachment=True, download_name=f"{title}.csv")
 
 
 @app.route("/download", methods=["GET"])
