@@ -27,7 +27,8 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 """
                 INSERT INTO uploaded_file (
                     file_name, 
-                    file_type, 
+                    file_type,
+                    specific_file_type,
                     file_path, 
                     file_period, 
                     uuid, 
@@ -38,7 +39,8 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 )
                 VALUES (
                     :file_name, 
-                    :file_type, 
+                    :file_type,
+                    :specific_file_type,
                     :file_path, 
                     :file_period, 
                     :uuid, 
@@ -51,17 +53,20 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
             ),
             {
                 "file_name": table_name,
-                "file_type": "numerical",
+                "file_type": "text",
+                "specific_file_type": "numercial",
                 "file_path": f"/virtual/numerical/{table_name}",
                 "file_period": f"{year}-{month:02d}",
                 "uuid": str(uuid4()),
                 "uploaded_at": datetime.utcnow(),
-                "description": json.dumps({
-                    "columns": col_list,
-                    "row_count": row_count,
-                    "source": "KMA",
-                    "is_empty": is_empty
-                }),
+                "description": json.dumps(
+                    {
+                        "columns": col_list,
+                        "row_count": row_count,
+                        "source": "KMA",
+                        "is_empty": is_empty,
+                    }
+                ),
                 "category": category,
                 "status": "completed",
             },

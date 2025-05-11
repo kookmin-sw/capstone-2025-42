@@ -50,14 +50,15 @@ with DAG(
 
         # 메타/파일 다운로드
         meta_path, file_path = download_meta_and_file(client, bucket, key)
-        file_type = get_file_type_by_magic(file_path)
+        specific_file_type, file_type = get_file_type_by_magic(file_path)
 
         meta_data = {}
         with open(meta_path) as f:
             meta_data = json.load(f)
         file_name_list = meta_data["file_name"].rsplit(".", 1)
         real_file_path = f"{file_name_list[0]}_{meta_data['uuid']}.{file_name_list[-1]}"
-        description = meta_data["description"] + " | "
+        description = " |"
+        description += meta_data["description"]
 
         conn = psycopg2.connect(
             host=POSTGRESQL_HOST,
@@ -69,14 +70,15 @@ with DAG(
         cur.execute(
             """
             INSERT INTO uploaded_file (
-                file_name, file_type, file_path, uuid, description,
+                file_name, file_type, specific_file_type, file_path, uuid, description,
                 uploaded_at, uploader_id, category, status, village_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     	    RETURNING file_id;
             """,
             (
                 meta_data["file_name"],
                 file_type,
+                specific_file_type,
                 real_file_path,
                 meta_data["uuid"],
                 description,
