@@ -3,6 +3,8 @@ import time
 import json
 from sqlalchemy import create_engine, inspect, text
 from utils.api_weather_util import fetch_weather_df
+from datetime import datetime
+from uuid import uuid4
 
 
 def drop_weather_views(db_uri):
@@ -19,28 +21,49 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
     row_count = len(df)
     is_empty = row_count == 0  # ✅ 빈 데이터 여부
 
-    station_id = (
-        df["STN_ID"].iloc[0] if "STN_ID" in df.columns and not df.empty else None
-    )
-
     with engine.begin() as conn:
         conn.execute(
             text(
                 """
-            INSERT INTO numerical_meta 
-            (table_name, category, year, month, source, row_count, columns, is_empty)
-            VALUES (:table_name, :category, :year, :month, :source, :row_count, :columns, :is_empty)
-        """
+                INSERT INTO uploaded_file (
+                    file_name, 
+                    file_type, 
+                    file_path, 
+                    file_period, 
+                    uuid, 
+                    uploaded_at, 
+                    description, 
+                    category, 
+                    status
+                )
+                VALUES (
+                    :file_name, 
+                    :file_type, 
+                    :file_path, 
+                    :file_period, 
+                    :uuid, 
+                    :uploaded_at, 
+                    :description, 
+                    :category, 
+                    :status
+                )
+                """
             ),
             {
-                "table_name": table_name,
+                "file_name": table_name,
+                "file_type": "numerical",
+                "file_path": f"/virtual/numerical/{table_name}",
+                "file_period": f"{year}-{month:02d}",
+                "uuid": str(uuid4()),
+                "uploaded_at": datetime.utcnow(),
+                "description": json.dumps({
+                    "columns": col_list,
+                    "row_count": row_count,
+                    "source": "KMA",
+                    "is_empty": is_empty
+                }),
                 "category": category,
-                "year": year,
-                "month": month,
-                "source": "KMA",  # 또는 적절한 출처 입력
-                "row_count": row_count,
-                "columns": json.dumps(col_list),
-                "is_empty": is_empty,
+                "status": "completed",
             },
         )
 

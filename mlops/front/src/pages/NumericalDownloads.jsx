@@ -8,7 +8,7 @@ function NumericalDownloads({ tableName, onClose }) {
 
   useEffect(() => {
     if (!tableName) return;
-    fetch(`/preview_numerical?table_name=${encodeURIComponent(tableName)}`)
+    fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?table_name=${encodeURIComponent(tableName)}`)
       .then(res => res.json())
       .then(data => {
         if (data.columns && data.preview) {
@@ -49,7 +49,10 @@ function NumericalDownloads({ tableName, onClose }) {
   const handleDownload = () => {
     const cols = Array.from(selected);
     const sortParams = sorts.map(s => `${s.col}:${s.order}`).join(',');
-    const url = `/download_numerical_filtered?table_name=${encodeURIComponent(tableName)}&columns=${encodeURIComponent(cols.join(','))}&sort=${encodeURIComponent(sortParams)}`;
+    const url = `${import.meta.env.VITE_API_BASE}/download_numerical_filtered` +
+      `?table_name=${encodeURIComponent(tableName)}` +
+      `&columns=${encodeURIComponent(cols.join(','))}` +
+      `&sort=${encodeURIComponent(sortParams)}`;
     window.open(url, '_blank');
   };
 
