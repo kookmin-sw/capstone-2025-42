@@ -13,7 +13,7 @@ function NumericalDownloads({ tableName, title, onClose }) {
             `&title=${encodeURIComponent(title)}`)
       .then(res => res.json())
       .then(data => {
-        console.log("📢 전달되는 테이블명:", title);
+        console.log("📢 전달되는 테이블명:", data);
         if (data.columns && data.preview) {
           setColumns(data.columns);
           setPreview(data.preview);

@@ -32,7 +32,7 @@ def is_doc_ppt_hwp(filepath):
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             head = f.read(2048).lower()
             if "<?xml" in head and ("<hwpml" in head or "<hwp>" in head):
-                return True
+                return "hwp"
     except:
         pass
 
@@ -44,18 +44,18 @@ def is_doc_ppt_hwp(filepath):
             stream_names = [".".join(s) for s in streams]
 
             if any("PowerPoint Document" in s for s in stream_names):
-                return True
+                return "ppt"
             elif any("WordDocument" in s for s in stream_names):
-                return True
+                return "doc"
             elif any(
                 s in stream_names for s in ["BodyText", "FileHeader", "HwpSummary"]
             ):
-                return True
+                return "hwp"
             else:
-                return False
+                return None
     except:
         pass
-    return False
+    return None
 
 
 def is_hwpx(filepath):
@@ -78,20 +78,21 @@ def is_pdf(filepath):
 def get_file_type_by_magic(filepath):
     mime = magic.Magic(mime=True)
     mime_type = mime.from_file(filepath)
+    spec_file_type = is_doc_ppt_hwp(filepath)
     if is_hwpx(filepath):
-        return "text"
+        return "hwpx", "text"
     elif filepath.lower().endswith(".csv"):
-        return "numerical"
+        return "numerical", "numerical"
     elif mime_type == "application/zip":
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
                 names = [name.replace("\\", "/") for name in zipf.namelist()]
                 if any(name.endswith("word/document.xml") for name in names):
-                    return "text"
+                    return "docx", "text"
                 elif any(name.endswith("ppt/presentation.xml") for name in names):
-                    return "text"
+                    return "pptx", "text"
                 elif any(name.endswith("xl/workbook.xml") for name in names):
-                    return "text"
+                    return "numerical", "numerical"
         except:
             pass
     elif (
@@ -102,7 +103,7 @@ def get_file_type_by_magic(filepath):
             with zipfile.ZipFile(filepath, "r") as zipf:
                 names = [name.replace("\\", "/") for name in zipf.namelist()]
                 if any(name.endswith("word/document.xml") for name in names):
-                    return "text"
+                    return "docx", "text"
         except:
             pass
     elif (
@@ -113,27 +114,27 @@ def get_file_type_by_magic(filepath):
             with zipfile.ZipFile(filepath, "r") as zipf:
                 names = [name.replace("\\", "/") for name in zipf.namelist()]
                 if any(name.endswith("ppt/presentation.xml") for name in names):
-                    return "text"
+                    return "pptx", "text"
         except:
             pass
     elif mime_type.startswith("image/"):
-        return "image"
+        return "image", "image"
     elif mime_type.startswith("video/"):
-        return "video"
+        return "video", "video"
     elif mime_type.startswith("audio/"):
-        return "audio"
+        return "audio", "audio"
     elif mime_type == "text/plain":
-        return "text"
+        return "text", "text"
     elif mime_type in [
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.ms-office",
         "application/xls",
     ]:
-        return "numerical"
+        return "numerical", "numerical"
     elif is_pdf(filepath):
-        return "text"
-    elif is_doc_ppt_hwp(filepath):
-        return "text"
+        return "pdf", "text"
+    elif spec_file_type is not None:
+        return spec_file_type, "text"
     else:
-        return "text"
+        return "text", "text"

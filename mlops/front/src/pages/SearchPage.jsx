@@ -1,11 +1,17 @@
 // src/pages/SearchPage.jsx
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import NumericalDownloads from './NumericalDownloads.jsx';
 import MergeTablesModal from './MergeTablesModal.jsx';
 
-/* ─────────── 파일 유형 매핑 ─────────── */
-const FILE_TYPE_MAP = { text: '문서', video: '영상', image: '이미지' };
+/* ───── 대분류(한글 표시 + 필터용) ───── */
+const FILE_TYPE_MAP = {
+  text:      '문서',
+  video:     '영상',
+  image:     '이미지',
+  numerical: '표(정형)',
+};
 const dataTypes   = ['전체', ...Object.values(FILE_TYPE_MAP)];
 const sortOptions = ['제목순', '최신순', '지역순'];
 
@@ -15,35 +21,26 @@ const CATEGORY_EMOJI_MAP = {
   생활: '🍳', 자원환경: '🌿', 기타: '➕',
   };
 
-/* ───── fetch 래퍼 (세션 쿠키만) ───── */
-const fetchWithSession = async (url, opts = {}) => {
-  const res = await fetch(url, { ...opts, credentials: 'include' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+/* fetch(JSON) with 세션 쿠키 */
+const fetchJSON = async (url, opts = {}) => {
+  const r = await fetch(url, { ...opts, credentials: 'include' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
 };
 
+const isNumerical = (item) => item.type === 'numerical' || item.specific_type === 'numerical';
+
 export default function SearchPage() {
-  const navigate = useNavigate();
+  const API = import.meta.env.VITE_API_BASE;
+  const nav = useNavigate();
 
-  /* 로그인 여부: /api/me 로 판정 ---------------- */
+  /* ───────── 상태 ───────── */
   const [loggedIn, setLoggedIn] = useState(false);
-  useEffect(() => {
-    (async () => {
-      try {
-        await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
-        setLoggedIn(true);
-      } catch {
-        setLoggedIn(false);
-      }
-    })();
-  }, []);
+  const [regionData, setRegionData]           = useState({ '시도(전체)': ['시군구(전체)'] });
+  const [categories, setCategories]           = useState([]);
+  const [categoryDataMap, setCategoryDataMap] = useState({});
 
-  /* 데이터 상태 ------------------------------ */
-  const [regionData, setRegionData]            = useState({ '시도(전체)': ['시군구(전체)'] });
-  const [categories, setCategories]            = useState([]);
-  const [categoryDataMap, setCategoryDataMap]  = useState({});
-
-  /* 선택 상태 ------------------------------- */
+  /* 검색/필터 */
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchKeyword, setSearchKeyword]       = useState('');
   const [selectedRegion, setSelectedRegion]     = useState('시도(전체)');
@@ -52,75 +49,70 @@ export default function SearchPage() {
   const [selectedSort, setSelectedSort]         = useState('최신순');
   const [relatedWords, setRelatedWords]         = useState([]);
   const [loading, setLoading]                   = useState(false);
-  const [selectedNumerical, setSelectedNumerical] = useState(null);
-  const [mergeTable, setMergeTable]             = useState(null);
-  const [selectedFile, setSelectedFile]         = useState(null);
 
-  const typeKor2Key = (kor) =>
-    Object.entries(FILE_TYPE_MAP).find(([, v]) => v === kor)?.[0];
+  /* Numerical 전용 팝업 */
+  const [selectedNumerical, setSelectedNumerical] = useState(null); // 컬럼 선택 & 다운로드
+  const [mergeTable, setMergeTable]               = useState(null); // 두 테이블 병합
 
-  /* ① 지역 데이터 --------------------------- */
+  /* 상세 미리보기 모달 */
+  const [detailItem,     setDetailItem]   = useState(null);
+  const [previewKind,    setPreviewKind]  = useState('');
+  const [previewSrc,     setPreviewSrc]   = useState('');
+  const [previewLoading, setPreviewLoading]= useState(false);
+
+  /* ───────── 로그인 여부 ───────── */
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/regions`);
-        setRegionData({ '시도(전체)': ['시군구(전체)'], ...data });
-      } catch (err) { console.error('지역 데이터 로드 오류:', err); }
-    })();
+    fetchJSON(`${API}/api/me`)
+      .then(() => setLoggedIn(true))
+      .catch(() => setLoggedIn(false));
   }, []);
 
-  /* ② 카테고리 목록 ------------------------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchWithSession(`${import.meta.env.VITE_API_BASE}/get_categories`);
-        setCategories(data);        // [{ name, count }]
-      } catch (err) { console.error('카테고리 로드 오류:', err); }
-    })();
-  }, []);
+  /* ───────── 공통 데이터 로드 ───────── */
+  useEffect(() => { fetchJSON(`${API}/api/regions`).then(setRegionData); }, []);
+  useEffect(() => { fetchJSON(`${API}/get_categories`).then(setCategories); }, []);
 
-  /* ③ 선택 카테고리 데이터 ------------------ */
+  /* ───────── 카테고리별 데이터 ───────── */
   useEffect(() => {
     if (!selectedCategory || categoryDataMap[selectedCategory]) return;
     (async () => {
       setLoading(true);
       try {
-        const url = new URL(`${import.meta.env.VITE_API_BASE}/search_by_category`);
+        const url = new URL(`${API}/search_by_category`);
         url.searchParams.set('category', selectedCategory);
-        const data = await fetchWithSession(url);
-        setCategoryDataMap((p) => ({ ...p, [selectedCategory]: data }));
-      } catch (err) { console.error('카테고리 데이터 로드 오류:', err); }
-      finally { setLoading(false); }
+        const data = await fetchJSON(url);
+        setCategoryDataMap(p => ({ ...p, [selectedCategory]: data }));
+      } finally { setLoading(false); }
     })();
   }, [selectedCategory, categoryDataMap]);
 
-  /* ④ /search 실행 ------------------------- */
-  const handleSearch = useCallback(async (keyword = searchKeyword) => {
-    if (!keyword.trim()) return;
-
-    const url = new URL(`${import.meta.env.VITE_API_BASE}/search`);
-    url.searchParams.set('word', keyword.trim());
+  /* ───────── 검색 ───────── */
+  const handleSearch = useCallback(async (kw = searchKeyword) => {
+    if (!kw.trim()) return;
+    const url = new URL(`${API}/search`);
+    url.searchParams.set('word', kw.trim());
     if (selectedSort === '제목순')      url.searchParams.set('order', 'name');
     else if (selectedSort === '최신순') url.searchParams.set('order', 'recent');
-    if (selectedDataType !== '전체')
-      url.searchParams.set('exp', typeKor2Key(selectedDataType) || 'all');
+    if (selectedDataType !== '전체') {
+      const key = Object.entries(FILE_TYPE_MAP).find(([, v]) => v === selectedDataType)?.[0];
+      if (key) url.searchParams.set('exp', key);
+    }
 
     setLoading(true);
     try {
-      const { results, related_word } = await fetchWithSession(url);
+      const { results, related_word } = await fetchJSON(url);
 
       const newCats = Object.keys(results).map((name) => ({
         name, count: results[name].length,
       }));
       setCategories(newCats);
       setCategoryDataMap(results);
-      setSelectedCategory(null);          // 검색 시 선택 해제
+      setSelectedCategory(null);
       setRelatedWords(related_word);
     } catch (err) { console.error('검색 오류:', err); }
     finally { setLoading(false); }
   }, [searchKeyword, selectedSort, selectedDataType]);
 
-  /* ⑤ 필터·정렬 ----------------------------- */
+  /* ───────── 필터·정렬 결과 ───────── */
   const filteredData = useMemo(() => {
     /* 선택 없음 → 모든 카테고리 데이터 합침 */
     let data = selectedCategory
@@ -167,37 +159,74 @@ export default function SearchPage() {
     handleSearch(word);
   };
 
+  /* ───────── 상세 미리보기 ───────── */
+  const openDetail = async item => {
+    setDetailItem(item);
+    setPreviewKind(''); setPreviewSrc(''); setPreviewLoading(true);
+
+    try {
+      // 순수 텍스트만 설명 표시
+      if (item.type === 'text' && !((item.specific_type === 'text') || (item.specific_type === 'pdf'))) {
+        setPreviewKind('none');
+        return;
+      }
+
+      // numerical 은 별도 팝업
+      if (isNumerical(item)) {
+        setPreviewKind('none');
+        return;
+      }
+
+      const { url, file_type } =
+        await fetchJSON(`${API}/preview_url?file_path=${item.file_path}`);
+
+      const spec = (item.specific_type || '').toLowerCase();
+
+      if (file_type === 'image' ||
+          spec.match(/png|jpe?g|gif|bmp|webp|svg/)) {
+        setPreviewKind('image');  setPreviewSrc(url);
+
+      } else if (file_type === 'video') {
+        setPreviewKind('video');  setPreviewSrc(url);
+
+      } else if (spec === 'pdf') {
+        setPreviewKind('pdf');    setPreviewSrc(url);
+
+      } else if (file_type === 'text') {
+        setPreviewKind('text');
+        setPreviewSrc(await fetch(url).then(r => r.text()));
+
+      } else {
+        setPreviewKind('none');
+      }
+    } catch (e) {
+      console.error(e); setPreviewKind('none');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+  const closeDetail = () => { setDetailItem(null); setPreviewKind(''); setPreviewSrc(''); };
+
   /* ✅ 상세보기 */
   const handleDetail = async (item) => {
-    try {
-      await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
-    } catch {
-      alert('상세보기하려면 로그인이 필요합니다.');
-      return navigate('/login');
-    }
-    if (item.type === 'numerical') {
-      setMergeTable({ table_name: item.title }); // 머지 팝업 호출
+    if (isNumerical(item)) {
+      setMergeTable({ table_name: item.table_name }); // 머지 팝업 호출
     } else {
-      console.log("📂 파일 상세 정보:", item);
-      alert('준비 중');
+      openDetail(item);
     }
   };
 
   /* ✅ 다운로드 */
-  const handleDownload = async (item) => {
-    try {
-      await fetchWithSession(`${import.meta.env.VITE_API_BASE}/api/me`);
-    } catch {
-      alert('다운로드하려면 로그인이 필요합니다.');
-      return navigate('/login');
-    }
+  const handleDownload = async item => {
+    try { await fetchJSON(`${API}/api/me`); }
+    catch { alert('다운로드하려면 로그인하세요'); return nav('/login'); }
 
-    if (item.type === 'numerical') {
+    if (isNumerical(item)) {
       console.log("📢 전달되는 테이블:", item);
       setSelectedNumerical(item);
     } else {
       const url =
-        `${import.meta.env.VITE_API_BASE}/download?` +
+        `${API}/download?` +
         `file_path=${encodeURIComponent(item.file_path)}` +
         `&title=${encodeURIComponent(item.title)}`;
       window.open(url, '_blank');
@@ -214,7 +243,11 @@ export default function SearchPage() {
         {categories.map((cat) => (
           <div
             key={cat.name}
-            onClick={() => handleCategoryClick(cat.name)}
+            onClick={() => {
+              setSelectedCategory(cat.name);
+              setSelectedDataType('전체');
+              setSelectedSort('최신순');
+            }}
             className={`flex flex-col items-center justify-center p-4 rounded-lg shadow cursor-pointer transition-all
               hover:bg-blue-100 ${selectedCategory === cat.name ? 'bg-blue-100' : 'bg-blue-50'}`}
           >
@@ -321,6 +354,29 @@ export default function SearchPage() {
         <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
       )}
 
+      {/* 상세 미리보기 모달 */}
+      {detailItem && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white w-11/12 md:w-2/3 lg:w-1/2 max-h-[90vh] overflow-auto rounded-lg p-6 relative">
+            <button onClick={closeDetail}
+                    className="absolute top-2 right-2 text-xl text-gray-500">&times;</button>
+            <h3 className="text-lg font-bold mb-4">{detailItem.title}</h3>
+
+            {previewKind === 'text-desc' && <p className="whitespace-pre-wrap">{detailItem.summary}</p>}
+            {previewKind === 'text'      && <pre className="whitespace-pre-wrap text-sm">{previewSrc}</pre>}
+            {previewKind === 'pdf'   && previewSrc && <iframe src={previewSrc} className="w-full h-[75vh]" />}
+            {previewKind === 'office'&& previewSrc && <iframe src={previewSrc} className="w-full h-[75vh]" />}
+            {previewKind === 'image' && previewSrc && <img   src={previewSrc} alt="" className="max-w-full mx-auto" />}
+            {previewKind === 'video' && previewSrc && <video src={previewSrc} controls className="w-full max-h-[70vh] mx-auto" />}
+            {previewLoading && <p className="text-sm text-gray-500">미리보기를 불러오는 중…</p>}
+            {previewKind === 'none' && !previewLoading && (
+              <p className="text-sm text-red-500">이 형식은 미리보기를 지원하지 않습니다.</p>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Numerical 팝업 렌더링 */}
       {selectedNumerical && (
         <NumericalDownloads
@@ -334,13 +390,6 @@ export default function SearchPage() {
         <MergeTablesModal
           baseTable={mergeTable}
           onClose={() => setMergeTable(null)}
-        />
-      )}
-      {/* 파일 상세보기 팝업 렌더링 */}
-      {selectedFile && (
-        <FilePreviewModal
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
         />
       )}
     </div>

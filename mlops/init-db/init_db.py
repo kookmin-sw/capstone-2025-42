@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     file_name TEXT,
     file_type TEXT,
     file_path TEXT,
+    specific_file_type TEXT,
     file_period TEXT,
     uuid TEXT NOT NULL UNIQUE,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

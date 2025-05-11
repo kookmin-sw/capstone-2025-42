@@ -25,6 +25,8 @@ from flask_cors import CORS
 from functools import wraps
 from sqlalchemy import create_engine, text
 from collections import Counter, defaultdict
+from pathlib import Path
+import mimetypes
 
 
 app = Flask(__name__, static_folder="dist", static_url_path="")
@@ -602,8 +604,7 @@ def get_categories():
 
 
 @app.route("/search_by_category", methods=["GET"])
-@token_required
-def search_by_category(user_id, username):
+def search_by_category():
     category = request.args.get("category")
 
     if not category:
@@ -619,11 +620,12 @@ def search_by_category(user_id, username):
         v.district,
         uf.uploaded_at,
         uf.file_type,
+        uf.specific_file_type,
         uf.file_name
     FROM uploaded_file uf
     LEFT JOIN village v ON uf.village_id = v.village_id
     WHERE uf.category = %s
-    ORDER BY uf.uploaded_at DESC
+    ORDER BY uf.uploaded_at DESC;
     """
 
     with conn.cursor() as cur:
@@ -632,14 +634,16 @@ def search_by_category(user_id, username):
 
     result = [
         {
-            "id": row[3],
-            "title": row[9] or "",
-            "summary": row[2].split("|")[-1],
-            "region": row[4],
-            "district": row[5],
-            "date": row[6],
-            "type": row[7],
-            "file_path": row[0],
+            "id":            row[3],
+            "title":         row[9] or "",
+            "summary":       (row[2] or "").split("|")[-1],
+            "region":        row[4],
+            "district":      row[5],
+            "date":          row[6],
+            "type":          row[7],          # text / image / video / numerical …
+            "specific_type": row[8],          # docx / pptx / hwpx / jpg …
+            "file_path":     row[0],
+            "table_name":    row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower() if row[7] == "numerical" else None,
         }
         for row in rows
     ]
@@ -651,22 +655,11 @@ def search_by_category(user_id, username):
 def search():
     keyword_string = request.args.get("word", "")
     order_string = request.args.get("order", "")
-    date_string = request.args.get("date", "all")  # all, today, week
-    exp_string = request.args.get("exp", "")  # text, video, ...
+    date_string = request.args.get("date", "all")  # all / today / week
+    exp_string = request.args.get("exp", "")  # text / video …
 
     keywords = keyword_string.split()
-
-    # 정렬 기준
-    if order_string == "name":
-        order_by = "ORDER BY file_name ASC"
-    elif order_string == "recent":
-        order_by = "ORDER BY uploaded_at DESC"
-    else:
-        order_by = "ORDER BY file_name ASC"
-
-    # 조건 모음
-    conditions = []
-    params = []
+    conditions, params = [], []
 
     # 키워드 검색
     for kw in keywords:
@@ -674,73 +667,66 @@ def search():
         conditions.append("(file_name ILIKE %s OR COALESCE(description, '') ILIKE %s)")
         params.extend([pattern, pattern])
 
-    # 날짜 필터링
     if date_string == "today":
-        today = datetime.utcnow().date()
         conditions.append("DATE(uploaded_at) = %s")
-        params.append(today)
+        params.append(datetime.utcnow().date())
     elif date_string == "week":
         week_ago = datetime.utcnow().date() - timedelta(days=7)
         conditions.append("DATE(uploaded_at) >= %s")
         params.append(week_ago)
 
-    # 확장자/파일타입 필터링
     if exp_string and exp_string != "all":
         conditions.append("file_type = %s")
         params.append(exp_string)
 
-    # WHERE 절 조립
-    where_clause = ""
-    if conditions:
-        where_clause = " WHERE " + " AND ".join(conditions)
+    where_sql = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    order_sql = "ORDER BY uploaded_at DESC" if order_string == "recent" \
+        else "ORDER BY file_name ASC"
 
     # 최종 쿼리 조립
     query = f"""
-        SELECT 
-          uf.file_path,
-          uf.uuid,
-          uf.description,
-          uf.file_id,
-          v.region,
-          v.district,
-          uf.uploaded_at,
-          uf.file_type,
-          uf.category,
-          uf.file_name
+        SELECT uf.file_path,
+               uf.uuid,
+               uf.description,
+               uf.file_id,
+               v.region,
+               v.district,
+               uf.uploaded_at,
+               uf.file_type,
+               uf.specific_file_type,
+               uf.category,
+               uf.file_name
         FROM uploaded_file uf
-        LEFT JOIN village v ON uf.village_id = v.village_id
-        {where_clause}
-        {order_by}
+        LEFT JOIN village v ON v.village_id = uf.village_id
+           {where_sql}
+           {order_sql};
     """
 
     results = defaultdict(list)
-    related_word = []
+
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
-        all_description_text = ""
+
+        # 연관 검색어 추출
+        all_desc = " ".join((row[2] or "") for row in rows)
+        related_word = [w for w, _ in top5_nouns(all_desc)]
+
         for row in rows:
-            if row[2] is not None:
-                all_description_text += row[2]
-                all_description_text += " "
-        related_word_set_list = top5_nouns(all_description_text)
-        related_word = [word for word, _ in related_word_set_list]
-        for row in rows:
-            category = row[8]
+            cate = row[9]
             table_name = row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower()
-            results[category].append(
-                {
-                    "id": row[3],
-                    "title": row[9] or "",
-                    "summary": row[2].split("|")[-1] if row[2] else "",
-                    "region": row[4] or "-",
-                    "district": row[5] or "-",
-                    "date": row[6].isoformat() if row[6] else "-",
-                    "type": row[7],
-                    "file_path": row[0] or "",
-                    "table_name": table_name if row[7] == "numerical" else None
-                }
-            )
+            results[cate].append({
+                "id": row[3],
+                "title": row[10] or "",
+                "summary": (row[2] or "").split("|")[-1],
+                "region": row[4] or "-",
+                "district": row[5] or "-",
+                "date": row[6].isoformat() if row[6] else "-",
+                "type": row[7],  # 대분류
+                "specific_type": row[8],  # 세부
+                "file_path": row[0],
+                "table_name": table_name if row[7] == "numerical" else None,
+            })
 
     return jsonify({"results": results, "related_word": related_word})
 
@@ -748,7 +734,8 @@ def search():
 @app.route("/preview_numerical", methods=["GET"])
 def preview_numerical():
     table_name = request.args.get("table_name")
-    title = request.args.get("title")
+    if table_name.startswith("/virtual/numerical/"):
+        table_name = Path(table_name).name
 
     if not table_name:
         return {"error": "Missing table_name"}, 400
@@ -767,6 +754,8 @@ def preview_numerical():
 @app.route("/download_numerical_filtered", methods=["GET"])
 def download_numerical_filtered():
     table_name = request.args.get("table_name")
+    if table_name.startswith("/virtual/numerical/"):
+        table_name = Path(table_name).name
     title = request.args.get("title")
     columns = request.args.get("columns")
     sort = request.args.get("sort")
@@ -815,6 +804,61 @@ def download_numerical_filtered():
     return send_file(path, as_attachment=True, download_name=f"{title}.csv")
 
 
+@app.route("/preview_url", methods=["GET"])
+def preview_url():
+    key = unquote(request.args.get("file_path", ""))
+    if not key:
+        return {"error": "file_path required"}, 400
+
+    CT_MAP = {
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "ppt": "application/vnd.ms-powerpoint",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "hwp": "application/x-hwp",
+        "hwpx": "application/x-hwp",
+    }
+
+    NUMERICAL_CT = {
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".csv": "text/csv",
+    }
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT file_type, specific_file_type "
+            "FROM uploaded_file WHERE file_path = %s",
+            (key,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return {"error": "File not found"}, 404
+
+    file_type, spec = row
+    ext = Path(key).suffix.lower()
+
+    if spec and spec != "numerical":
+        content_type = CT_MAP.get(spec, "application/octet-stream")
+    elif spec == "numerical":  # ← numerical 판별
+        content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
+    else:
+        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+    presigned = minio_client.presigned_get_object(
+        BUCKET_NAME,
+        key,
+        expires=timedelta(minutes=10),
+        response_headers={
+            "response-content-type": content_type,
+            "response-content-disposition": "inline",
+        },
+    )
+
+    return jsonify({"url": presigned, "file_type": file_type})
+
+
 @app.route("/download", methods=["GET"])
 @token_required
 def download(user_id, username):
@@ -852,7 +896,11 @@ def download(user_id, username):
             pass
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=title or os.path.basename(file_name))
+    return send_file(
+        local_path,
+        as_attachment=True,
+        download_name=title or os.path.basename(file_name),
+    )
 
 
 @app.route("/preview_merge_table", methods=["GET"])

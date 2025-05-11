@@ -2,12 +2,17 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="128f9471-a6b7-4789-8e62-0d51168439b7" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/airflow/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/airflow/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/airflow/setup.sh" beforeDir="false" afterPath="$PROJECT_DIR$/airflow/setup.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/airflow/dags/process_router_dag.py" beforeDir="false" afterPath="$PROJECT_DIR$/airflow/dags/process_router_dag.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/airflow/dags/utils/airflow_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/airflow/dags/utils/airflow_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/airflow/dags/utils/api_weather_module.py" beforeDir="false" afterPath="$PROJECT_DIR$/airflow/dags/utils/api_weather_module.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/front/src/pages/MergeTablesModal.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/front/src/pages/MergeTablesModal.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/front/src/pages/NumericalDownloads.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/front/src/pages/NumericalDownloads.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/front/src/pages/SearchPage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/front/src/pages/SearchPage.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/init-db/init_db.py" beforeDir="false" afterPath="$PROJECT_DIR$/init-db/init_db.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/init-db/wait-for-postgres.sh" beforeDir="false" afterPath="$PROJECT_DIR$/init-db/wait-for-postgres.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/init/init-minio.sh" beforeDir="false" afterPath="$PROJECT_DIR$/init/init-minio.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/webserver/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/webserver/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -16,6 +21,14 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="GitSEFilterConfiguration">
+    <file-type-list>
+      <filtered-out-file-type name="LOCAL_BRANCH" />
+      <filtered-out-file-type name="REMOTE_BRANCH" />
+      <filtered-out-file-type name="TAG" />
+      <filtered-out-file-type name="COMMIT_BY_MESSAGE" />
+    </file-type-list>
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
