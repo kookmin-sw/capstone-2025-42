@@ -40,6 +40,7 @@ def load_secret(name, default=""):
             return f.read().strip()
     return os.getenv(name.upper(), default)
 
+
 MINIO_USER = load_secret("minio_root_user")
 MINIO_PASSWORD = load_secret("minio_root_password")
 JWT_SECRET_KEY = load_secret("jwt_secret_key")
@@ -597,8 +598,10 @@ def get_categories():
     for name, count in rows:
         category_counter[name] = category_counter.get(name, 0) + count
 
-    result = [{"name": name, "count": count}
-              for name, count in sorted(category_counter.items(), key=lambda x: -x[1])]
+    result = [
+        {"name": name, "count": count}
+        for name, count in sorted(category_counter.items(), key=lambda x: -x[1])
+    ]
     return jsonify(result)
 
 
@@ -630,15 +633,15 @@ def search_by_category():
 
     result = [
         {
-            "id":            row[3],
-            "title":         row[9] or "",
-            "summary":       (row[2] or "").split("|")[-1],
-            "region":        row[4],
-            "district":      row[5],
-            "date":          row[6],
-            "type":          row[7],          # text / image / video / numerical …
-            "specific_type": row[8],          # docx / pptx / hwpx / jpg …
-            "file_path":     row[0],
+            "id": row[3],
+            "title": row[9] or "",
+            "summary": (row[2] or "").split("|")[-1],
+            "region": row[4],
+            "district": row[5],
+            "date": row[6],
+            "type": row[7],  # text / image / video / numerical …
+            "specific_type": row[8],  # docx / pptx / hwpx / jpg …
+            "file_path": row[0],
         }
         for row in rows
     ]
@@ -648,11 +651,11 @@ def search_by_category():
 @app.route("/search", methods=["GET"])
 def search():
     keyword_string = request.args.get("word", "")
-    order_string   = request.args.get("order", "")
-    date_string    = request.args.get("date", "all")   # all / today / week
-    exp_string     = request.args.get("exp", "")       # text / video …
+    order_string = request.args.get("order", "")
+    date_string = request.args.get("date", "all")  # all / today / week
+    exp_string = request.args.get("exp", "")  # text / video …
 
-    keywords   = keyword_string.split()
+    keywords = keyword_string.split()
     conditions, params = [], []
 
     # ── WHERE 조건 ──
@@ -674,8 +677,11 @@ def search():
         params.append(exp_string)
 
     where_sql = f" WHERE {' AND '.join(conditions)}" if conditions else ""
-    order_sql = "ORDER BY uploaded_at DESC" if order_string == "recent" \
-            else "ORDER BY file_name ASC"
+    order_sql = (
+        "ORDER BY uploaded_at DESC"
+        if order_string == "recent"
+        else "ORDER BY file_name ASC"
+    )
 
     query = f"""
         SELECT uf.file_path,
@@ -707,18 +713,20 @@ def search():
 
     for row in rows:
         cate = row[9]
-        results[cate].append({
-            "id":            row[3],
-            "title":         row[10] or "",
-            "summary":       (row[2] or "").split("|")[-1],
-            "region":        row[4] or "-",
-            "district":      row[5] or "-",
-            "date":          row[6].isoformat() if row[6] else "-",
-            "type":          row[7],                  # 대분류
-            "specific_type": row[8],                  # 세부
-            "file_path":     row[0],
-            "table_name":    row[0] if row[7] == "numerical" else None,
-        })
+        results[cate].append(
+            {
+                "id": row[3],
+                "title": row[10] or "",
+                "summary": (row[2] or "").split("|")[-1],
+                "region": row[4] or "-",
+                "district": row[5] or "-",
+                "date": row[6].isoformat() if row[6] else "-",
+                "type": row[7],  # 대분류
+                "specific_type": row[8],  # 세부
+                "file_path": row[0],
+                "table_name": row[0] if row[7] == "numerical" else None,
+            }
+        )
 
     return jsonify({"results": results, "related_word": related_word})
 
@@ -794,25 +802,26 @@ def preview_url():
         return {"error": "file_path required"}, 400
 
     CT_MAP = {
-        "pdf":  "application/pdf",
-        "doc":  "application/msword",
+        "pdf": "application/pdf",
+        "doc": "application/msword",
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "ppt":  "application/vnd.ms-powerpoint",
+        "ppt": "application/vnd.ms-powerpoint",
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "hwp":  "application/x-hwp",
+        "hwp": "application/x-hwp",
         "hwpx": "application/x-hwp",
     }
 
     NUMERICAL_CT = {
-        ".xls":  "application/vnd.ms-excel",
+        ".xls": "application/vnd.ms-excel",
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".csv":  "text/csv",
+        ".csv": "text/csv",
     }
 
     with conn.cursor() as cur:
         cur.execute(
             "SELECT file_type, specific_file_type "
-            "FROM uploaded_file WHERE file_path = %s", (key,)
+            "FROM uploaded_file WHERE file_path = %s",
+            (key,),
         )
         row = cur.fetchone()
     if not row:
@@ -823,7 +832,7 @@ def preview_url():
 
     if spec and spec != "numerical":
         content_type = CT_MAP.get(spec, "application/octet-stream")
-    elif spec == "numerical":          # ← numerical 판별
+    elif spec == "numerical":  # ← numerical 판별
         content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
     else:
         content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
@@ -833,7 +842,7 @@ def preview_url():
         key,
         expires=timedelta(minutes=10),
         response_headers={
-            "response-content-type":        content_type,
+            "response-content-type": content_type,
             "response-content-disposition": "inline",
         },
     )
@@ -877,7 +886,11 @@ def download(user_id, username):
             pass
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=title or os.path.basename(file_name))
+    return send_file(
+        local_path,
+        as_attachment=True,
+        download_name=title or os.path.basename(file_name),
+    )
 
 
 @app.route("/preview_merge_table", methods=["GET"])

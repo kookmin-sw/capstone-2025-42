@@ -90,7 +90,7 @@ def get_file_type_by_magic(filepath):
                 elif any(name.endswith("ppt/presentation.xml") for name in names):
                     return "pptx", "text"
                 elif any(name.endswith("xl/workbook.xml") for name in names):
-                    return  "numerical", "text"
+                    return "numerical", "text"
         except:
             pass
     elif (

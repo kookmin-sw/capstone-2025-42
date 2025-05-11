@@ -59,12 +59,14 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 "file_period": f"{year}-{month:02d}",
                 "uuid": str(uuid4()),
                 "uploaded_at": datetime.utcnow(),
-                "description": json.dumps({
-                    "columns": col_list,
-                    "row_count": row_count,
-                    "source": "KMA",
-                    "is_empty": is_empty
-                }),
+                "description": json.dumps(
+                    {
+                        "columns": col_list,
+                        "row_count": row_count,
+                        "source": "KMA",
+                        "is_empty": is_empty,
+                    }
+                ),
                 "category": category,
                 "status": "completed",
             },
