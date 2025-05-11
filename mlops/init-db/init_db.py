@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     file_id SERIAL PRIMARY KEY,
     file_name TEXT,
     file_type TEXT,
+    specific_file_type TEXT,
     file_path TEXT,
     file_period TEXT,
     uuid TEXT NOT NULL UNIQUE,
