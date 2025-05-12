@@ -74,28 +74,30 @@ def get_file_created_date(path):
 
 
 def extract_xlsx(filepath):
-    return pd.read_excel(filepath, engine='openpyxl')
+    return pd.read_excel(filepath, engine="openpyxl")
 
 
 def extract_xls(filepath):
-    return pd.read_excel(filepath, engine='xlrd')
+    return pd.read_excel(filepath, engine="xlrd")
 
 
 def extract_csv(filepath):
     # 인코딩 자동 감지
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         result = chardet.detect(f.read(10000))  # 첫 10KB로 인코딩 감지
-        encoding = result['encoding']
+        encoding = result["encoding"]
 
     try:
         return pd.read_csv(filepath, encoding=encoding)
     except UnicodeDecodeError:
-        for fallback_enc in ['cp949', 'euc-kr']:
+        for fallback_enc in ["cp949", "euc-kr"]:
             try:
                 return pd.read_csv(filepath, encoding=fallback_enc)
             except UnicodeDecodeError:
                 continue
-        raise ValueError(f"Failed to decode CSV file with detected encodings. File: {filepath}")
+        raise ValueError(
+            f"Failed to decode CSV file with detected encodings. File: {filepath}"
+        )
 
 
 # 파일 확장자에 따라 적절한 추출 함수 선택
@@ -106,9 +108,12 @@ def process_numerical(filepath):
 
     if mime_type in [
         "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ]:
         ext = "xls"
+    if mime_type in [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]:
+        ext = "xlsx"
     elif mime_type == "application/zip":
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
@@ -148,7 +153,4 @@ def process_numerical(filepath):
 
     text_data = df.to_csv(index=False)
 
-    return {
-        "metadata": {"createdate": meta_extractor(filepath)},
-        "text": text_data
-    }
+    return {"metadata": {"createdate": meta_extractor(filepath)}, "text": text_data}

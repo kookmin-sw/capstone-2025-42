@@ -49,7 +49,7 @@ cat >/tmp/cors.json <<'EOF'
       "Content-Length",
       "ETag"
     ],
-    "MaxAgeSeconds": 600
+    "MaxAgeSeconds": 60
   }
 ]
 EOF

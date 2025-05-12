@@ -149,28 +149,30 @@ export default function SearchPage() {
         setPreviewKind('none');
         return;
       }
-
-      const { url, file_type } =
-        await fetchJSON(`${API}/preview_url?file_path=${item.file_path}`);
-
       const spec = (item.specific_type || '').toLowerCase();
-
-      if (file_type === 'image' ||
-          spec.match(/png|jpe?g|gif|bmp|webp|svg/)) {
-        setPreviewKind('image');  setPreviewSrc(url);
-
-      } else if (file_type === 'video') {
-        setPreviewKind('video');  setPreviewSrc(url);
-
+      /* ─ 미리보기 가능한 형식 판별 ─ */
+      let kind = 'none';
+      if (item.type === 'image' || spec.match(/png|jpe?g|gif|bmp|webp|svg/)) {
+	kind = 'image';
+      } else if (item.type === 'video') {
+	kind = 'video';
       } else if (spec === 'pdf') {
-        setPreviewKind('pdf');    setPreviewSrc(url);
+	kind = 'pdf';
+      } else if (item.type === 'text') {
+	kind = 'text';
+      }
 
-      } else if (file_type === 'text') {
-        setPreviewKind('text');
-        setPreviewSrc(await fetch(url).then(r => r.text()));
+      if (kind === 'none') { setPreviewKind('none'); return; }
 
-      } else {
-        setPreviewKind('none');
+      const previewUrl = `${API}/preview?file_path=${encodeURIComponent(item.file_path)}`;
+
+      if (kind === 'text') {                       // 텍스트는 내용 직접 로드
+	const txt = await fetch(previewUrl, { credentials: 'include' }).then(r => r.text());
+	setPreviewKind('text');
+	setPreviewSrc(txt);
+      } else {                                    // 나머지는 src 로 바로 사용
+	setPreviewKind(kind);
+	setPreviewSrc(previewUrl);
       }
     } catch (e) {
       console.error(e); setPreviewKind('none');
@@ -182,6 +184,13 @@ export default function SearchPage() {
 
   /* ✅ 상세보기 */
   const handleDetail = async (item) => {
+    if (!loggedIn) {
+      setDetailItem(item);
+      setPreviewKind('login');      // ← 새 상태값
+      setPreviewSrc('');
+      setPreviewLoading(false);
+      return;
+    }
     if (isNumerical(item)) {
       setMergeTable({ table_name: item.table_name }); // 머지 팝업 호출
     } else {
@@ -333,7 +342,6 @@ export default function SearchPage() {
             <button onClick={closeDetail}
                     className="absolute top-2 right-2 text-xl text-gray-500">&times;</button>
             <h3 className="text-lg font-bold mb-4">{detailItem.title}</h3>
-
             {previewKind === 'text-desc' && <p className="whitespace-pre-wrap">{detailItem.summary}</p>}
             {previewKind === 'text'      && <pre className="whitespace-pre-wrap text-sm">{previewSrc}</pre>}
             {previewKind === 'pdf'   && previewSrc && <iframe src={previewSrc} className="w-full h-[75vh]" />}
@@ -341,6 +349,14 @@ export default function SearchPage() {
             {previewKind === 'image' && previewSrc && <img   src={previewSrc} alt="" className="max-w-full mx-auto" />}
             {previewKind === 'video' && previewSrc && <video src={previewSrc} controls className="w-full max-h-[70vh] mx-auto" />}
             {previewLoading && <p className="text-sm text-gray-500">미리보기를 불러오는 중…</p>}
+	    {previewKind === 'login' && !previewLoading && (
+	      <div className="text-center">
+		<p className="text-sm text-red-500 mb-4">미리보기를 보려면 로그인하세요.</p>
+		  <button onClick={() => nav('/login')} className="px-4 py-2 bg-blue-500 text-white rounded">
+		    로그인 페이지로 이동
+		  </button>
+	      </div>
+	    )}
             {previewKind === 'none' && !previewLoading && (
               <p className="text-sm text-red-500">이 형식은 미리보기를 지원하지 않습니다.</p>
             )}
