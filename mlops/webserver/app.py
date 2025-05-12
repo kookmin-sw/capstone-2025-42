@@ -7,6 +7,9 @@ from flask import (
     after_this_request,
     send_from_directory,
     make_response,
+    stream_with_context,
+    abort,
+    Response,
 )
 from minio import Minio
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,7 +17,7 @@ import psycopg2
 import pandas as pd
 from psycopg2.extras import RealDictCursor
 import jwt
-from uuid import uuid4
+import secrets
 import json
 import os
 import time
@@ -28,6 +31,21 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import mimetypes
 
+CT_MAP = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "hwp": "application/x-hwp",
+    "hwpx": "application/x-hwp",
+}
+
+NUMERICAL_CT = {
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+}
 
 app = Flask(__name__, static_folder="dist", static_url_path="")
 CORS(app, origins="http://localhost:5173", supports_credentials=True)
@@ -535,7 +553,7 @@ def upload(user_id, username):
 
         file_name = file.filename
         base_name, ext = os.path.splitext(file_name)
-        uuid_val = str(uuid4())
+        uuid_val = secrets.token_hex(6)
 
         file_key = f"{base_name}_{uuid_val}{ext}"
         json_key = f"meta/{base_name}_{uuid_val}.json"
@@ -634,16 +652,20 @@ def search_by_category():
 
     result = [
         {
-            "id":            row[3],
-            "title":         row[9] or "",
-            "summary":       (row[2] or "").split("|")[-1],
-            "region":        row[4],
-            "district":      row[5],
-            "date":          row[6],
-            "type":          row[7],          # text / image / video / numerical …
-            "specific_type": row[8],          # docx / pptx / hwpx / jpg …
-            "file_path":     row[0],
-            "table_name":    row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower() if row[7] == "numerical" else None,
+            "id": row[3],
+            "title": row[9] or "",
+            "summary": (row[2] or "").split("|")[-1],
+            "region": row[4],
+            "district": row[5],
+            "date": row[6],
+            "type": row[7],  # text / image / video / numerical …
+            "specific_type": row[8],  # docx / pptx / hwpx / jpg …
+            "file_path": row[0],
+            "table_name": (
+                row[0].rsplit(".", 1)[0].replace("-", "_").replace(" ", "_").lower()
+                if row[7] == "numerical"
+                else None
+            ),
         }
         for row in rows
     ]
@@ -715,19 +737,23 @@ def search():
 
         for row in rows:
             cate = row[9]
-            table_name = row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower()
-            results[cate].append({
-                "id": row[3],
-                "title": row[10] or "",
-                "summary": (row[2] or "").split("|")[-1],
-                "region": row[4] or "-",
-                "district": row[5] or "-",
-                "date": row[6].isoformat() if row[6] else "-",
-                "type": row[7],  # 대분류
-                "specific_type": row[8],  # 세부
-                "file_path": row[0],
-                "table_name": table_name if row[7] == "numerical" else None,
-            })
+            table_name = (
+                row[0].rsplit(".", 1)[0].replace("-", "_").replace(" ", "_").lower()
+            )
+            results[cate].append(
+                {
+                    "id": row[3],
+                    "title": row[10] or "",
+                    "summary": (row[2] or "").split("|")[-1],
+                    "region": row[4] or "-",
+                    "district": row[5] or "-",
+                    "date": row[6].isoformat() if row[6] else "-",
+                    "type": row[7],  # 대분류
+                    "specific_type": row[8],  # 세부
+                    "file_path": row[0],
+                    "table_name": table_name if row[7] == "numerical" else None,
+                }
+            )
 
     return jsonify({"results": results, "related_word": related_word})
 
@@ -741,6 +767,7 @@ def preview_numerical():
     if not table_name:
         return {"error": "Missing table_name"}, 400
 
+    print(table_name, flush=True)
     query = f'SELECT * FROM "{table_name}" LIMIT 5'
     try:
         df = pd.read_sql(query, engine)
@@ -805,28 +832,14 @@ def download_numerical_filtered():
     return send_file(path, as_attachment=True, download_name=f"{title}.csv")
 
 
-@app.route("/preview_url", methods=["GET"])
-def preview_url():
+@app.route("/preview", methods=["GET"])
+@token_required
+def preview(user_id, username):
     key = unquote(request.args.get("file_path", ""))
     if not key:
         return {"error": "file_path required"}, 400
 
-    CT_MAP = {
-        "pdf": "application/pdf",
-        "doc": "application/msword",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "ppt": "application/vnd.ms-powerpoint",
-        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "hwp": "application/x-hwp",
-        "hwpx": "application/x-hwp",
-    }
-
-    NUMERICAL_CT = {
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".csv": "text/csv",
-    }
-
+    # 1) DB에서 메타 조회
     with conn.cursor() as cur:
         cur.execute(
             "SELECT file_type, specific_file_type "
@@ -840,78 +853,36 @@ def preview_url():
     file_type, spec = row
     ext = Path(key).suffix.lower()
 
+    # 2) MIME 타입 결정
     if spec and spec != "numerical":
         content_type = CT_MAP.get(spec, "application/octet-stream")
-    elif spec == "numerical":  # ← numerical 판별
-        content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
+    elif spec == "numerical":
+        content_type = NUMERICAL_CT.get(ext, "application/octet-stream")
     else:
         content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
 
-    presigned = minio_client.presigned_get_object(
-        BUCKET_NAME,
-        key,
-        expires=timedelta(minutes=10),
-        response_headers={
-            "response-content-type": content_type,
-            "response-content-disposition": "inline",
-        },
-    )
+    # 3) MinIO 객체 스트림 가져오기
+    try:
+        obj = minio_client.get_object(BUCKET_NAME, key)
+    except Exception as e:
+        logging.exception("MinIO get_object failed")
+        return {"error": "Object fetch failed"}, 500
 
-    return jsonify({"url": presigned, "file_type": file_type})
+    # 4) 제너레이터로 메모리 절약 전송
+    def generate():
+        try:
+            for chunk in obj.stream(1024 * 64):  # 64 KiB
+                yield chunk
+        finally:
+            obj.close()
 
-
-@app.route("/preview_url", methods=["GET"])
-def preview_url():
-    key = unquote(request.args.get("file_path", ""))
-    if not key:
-        return {"error": "file_path required"}, 400
-
-    CT_MAP = {
-        "pdf": "application/pdf",
-        "doc": "application/msword",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "ppt": "application/vnd.ms-powerpoint",
-        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "hwp": "application/x-hwp",
-        "hwpx": "application/x-hwp",
+    headers = {
+        "Content-Type": content_type,
+        "Content-Disposition": "inline",
+        "Cache-Control": "no-store",
     }
 
-    NUMERICAL_CT = {
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".csv": "text/csv",
-    }
-
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT file_type, specific_file_type "
-            "FROM uploaded_file WHERE file_path = %s",
-            (key,),
-        )
-        row = cur.fetchone()
-    if not row:
-        return {"error": "File not found"}, 404
-
-    file_type, spec = row
-    ext = Path(key).suffix.lower()
-
-    if spec and spec != "numerical":
-        content_type = CT_MAP.get(spec, "application/octet-stream")
-    elif spec == "numerical":  # ← numerical 판별
-        content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
-    else:
-        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
-
-    presigned = minio_client.presigned_get_object(
-        BUCKET_NAME,
-        key,
-        expires=timedelta(minutes=10),
-        response_headers={
-            "response-content-type": content_type,
-            "response-content-disposition": "inline",
-        },
-    )
-    return jsonify({"url": presigned, "file_type": file_type})
+    return Response(stream_with_context(generate()), headers=headers)
 
 
 @app.route("/download", methods=["GET"])
@@ -981,46 +952,73 @@ def download_merge():
     how = request.args.get("join_type", "join")  # join, concat_h, concat_v
     on = request.args.get("join_key")
 
-    base_cols = request.args.get("base_cols", "").split(",")
-    target_cols = request.args.get("target_cols", "").split(",")
+    base_cols = [c for c in request.args.get("base_cols", "").split(",") if c]
+    target_cols = [c for c in request.args.get("target_cols", "").split(",") if c]
 
     if not table1 or not table2:
         return {"error": "base와 target 테이블명이 필요합니다."}, 400
 
+    # ─── 테이블 읽기 ───────────────────────────────────────────────
     try:
-        df1 = pd.read_sql(f"SELECT * FROM {table1}", engine)[base_cols]
-        df2 = pd.read_sql(f"SELECT * FROM {table2}", engine)[target_cols]
+        df1 = pd.read_sql_table(table1, engine, columns=base_cols or None)
+        df2 = pd.read_sql_table(table2, engine, columns=target_cols or None)
     except Exception as e:
         return {"error": f"테이블 로드 실패: {e}"}, 500
 
+    # ─── 병합 로직 ────────────────────────────────────────────────
     try:
         if how == "concat_v":
-            df_merged = pd.concat([df1, df2], axis=0)
+            df_merged = pd.concat([df1, df2], axis=0, ignore_index=True)
+
         elif how == "concat_h":
             df_merged = pd.concat(
                 [df1.reset_index(drop=True), df2.reset_index(drop=True)], axis=1
             )
-        else:
+
+        else:  # how == "join"
             if not on:
                 return {"error": "조인 기준 컬럼이 필요합니다."}, 400
-            df_merged = pd.merge(df1, df2, on=on, how="inner")
+
+            # 1) 기본 suffix(_x, _y)로 머지
+            df_merged = pd.merge(df1, df2, on=on, how="inner")  # suffixes 기본값
+
+            # 2) 중복 컬럼(_x, _y) 값 합치기 → 하나의 컬럼으로
+            for col in list(df_merged.columns):
+                if col.endswith("_x"):
+                    base = col[:-2]  # 'price_x' → 'price'
+                    ycol = f"{base}_y"
+                    if ycol in df_merged.columns:
+                        # col(_x)이 null이면 ycol(_y) 값으로 채워서 새 컬럼(base) 생성
+                        df_merged[base] = df_merged[col].combine_first(df_merged[ycol])
+
+            # 3) _x / _y 컬럼 제거
+            df_merged.drop(
+                columns=[c for c in df_merged.columns if c.endswith(("_x", "_y"))],
+                inplace=True,
+            )
+
     except Exception as e:
         return {"error": f"병합 실패: {e}"}, 500
 
-    # 파일 저장 및 응답
-    filename = f"{table1}_{table2}_merged.csv"
+    # ─── CSV 저장 및 다운로드 ────────────────────────────────────
+    filename = f"{table1[:30]}_{table2[:30]}_merged.csv"
     csv_path = os.path.join("/tmp", filename)
-    df_merged.to_csv(csv_path, index=False)
+    df_merged.to_csv(csv_path, index=False, encoding="utf-8-sig")  # BOM 포함
 
     @after_this_request
     def cleanup(response):
         try:
             os.remove(csv_path)
-        except:
+        except FileNotFoundError:
             pass
         return response
 
-    return send_file(csv_path, as_attachment=True, download_name=filename)
+    return send_file(
+        csv_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="text/csv; charset=utf-8",
+    )
 
 
 if __name__ == "__main__":

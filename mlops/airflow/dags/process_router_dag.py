@@ -211,5 +211,10 @@ with DAG(
     (
         decide_file_type
         >> branch_op
-        >> [trigger_video_dag, trigger_image_dag, trigger_text_dag, trigger_numerical_dag]
+        >> [
+            trigger_video_dag,
+            trigger_image_dag,
+            trigger_text_dag,
+            trigger_numerical_dag,
+        ]
     )

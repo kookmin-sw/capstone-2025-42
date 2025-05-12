@@ -64,7 +64,6 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     file_type TEXT,
     specific_file_type TEXT,
     file_path TEXT,
-    specific_file_type TEXT,
     file_period TEXT,
     uuid TEXT NOT NULL UNIQUE,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -73,8 +72,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     location TEXT,
     category TEXT,
     status TEXT NOT NULL,
-    village_id INTEGER REFERENCES village(village_id),
-    thumbnail_path TEXT
+    village_id INTEGER REFERENCES village(village_id)
 );
 """
 
