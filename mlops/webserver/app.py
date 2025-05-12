@@ -89,7 +89,7 @@ for i in range(60):
 else:
     raise Exception("PostgreSQL 연결 실패: DB가 안 떠 있음")
 
-DB_URI = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@postgres:5432/airflow"
+DB_URI = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@{POSTGRESQL_HOST}:5432/{POSTGRESQL_DATABASE}"
 engine = create_engine(DB_URI)
 
 
