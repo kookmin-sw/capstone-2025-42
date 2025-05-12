@@ -65,18 +65,9 @@ docker-compose down -v
    - 사용자명: `minio_root_user` 파일 내용  
    - 비밀번호: `minio_root_password` 파일 내용
 
-2. **버킷 생성 생략**  
-   `video-bucket`은 자동으로 생성되고 `.mp4` 업로드에 대한 webhook 이벤트가 자동 등록됩니다.
-
-3. **파일 업로드**  
-   `video-bucket`에 `.mp4` 파일을 업로드하면 MinIO가 Webhook을 통해 Airflow DAG을 실행합니다.
-
-4. **Airflow 웹 UI 확인**  
+2. **Airflow 웹 UI 확인**  
    [http://localhost:8080](http://localhost:8080)  
    로그인 정보:  
    - 사용자명: `airflow_user`  
    - 비밀번호: `airflow_password`  
    실행 로그 및 DAG 진행 상황 확인 가능
-
-5. **결과 확인**  
-   PostgreSQL `video_results` 테이블에 처리 결과가 저장됩니다.
