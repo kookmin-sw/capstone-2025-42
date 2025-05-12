@@ -81,6 +81,8 @@ def get_file_type_by_magic(filepath):
     spec_file_type = is_doc_ppt_hwp(filepath)
     if is_hwpx(filepath):
         return "hwpx", "text"
+    elif filepath.lower().endswith(".csv"):
+        return "numerical", "numerical"
     elif mime_type == "application/zip":
         try:
             with zipfile.ZipFile(filepath, "r") as zipf:
@@ -90,7 +92,7 @@ def get_file_type_by_magic(filepath):
                 elif any(name.endswith("ppt/presentation.xml") for name in names):
                     return "pptx", "text"
                 elif any(name.endswith("xl/workbook.xml") for name in names):
-                    return "numerical", "text"
+                    return "numerical", "numerical"
         except:
             pass
     elif (
@@ -129,7 +131,7 @@ def get_file_type_by_magic(filepath):
         "application/vnd.ms-office",
         "application/xls",
     ]:
-        return "numerical", "text"
+        return "numerical", "numerical"
     elif is_pdf(filepath):
         return "pdf", "text"
     elif spec_file_type is not None:

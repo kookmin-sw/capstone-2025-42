@@ -27,7 +27,7 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 """
                 INSERT INTO uploaded_file (
                     file_name, 
-                    file_type,
+                    file_type, 
                     specific_file_type,
                     file_path, 
                     file_period, 
@@ -38,8 +38,8 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                     status
                 )
                 VALUES (
-                    :file_name, 
-                    :file_type,
+                    :file_name,
+                    :file_type, 
                     :specific_file_type,
                     :file_path, 
                     :file_period, 
@@ -53,7 +53,7 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
             ),
             {
                 "file_name": table_name,
-                "file_type": "text",
+                "file_type": "numerical",
                 "specific_file_type": "numercial",
                 "file_path": f"/virtual/numerical/{table_name}",
                 "file_period": f"{year}-{month:02d}",

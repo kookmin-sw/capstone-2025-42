@@ -612,20 +612,21 @@ def search_by_category():
         return jsonify({"error": "category parameter is required"}), 400
 
     query = """
-        SELECT uf.file_path,
-               uf.uuid,
-               uf.description,
-               uf.file_id,
-               v.region,
-               v.district,
-               uf.uploaded_at,
-               uf.file_type,
-               uf.specific_file_type,
-               uf.file_name
-          FROM uploaded_file uf
-     LEFT JOIN village v ON v.village_id = uf.village_id
-         WHERE uf.category = %s
-      ORDER BY uf.uploaded_at DESC;
+    SELECT
+        uf.file_path,
+        uf.uuid,
+        uf.description,
+        uf.file_id,
+        v.region,
+        v.district,
+        uf.uploaded_at,
+        uf.file_type,
+        uf.specific_file_type,
+        uf.file_name
+    FROM uploaded_file uf
+    LEFT JOIN village v ON uf.village_id = v.village_id
+    WHERE uf.category = %s
+    ORDER BY uf.uploaded_at DESC;
     """
     with conn.cursor() as cur:
         cur.execute(query, (category,))
@@ -633,15 +634,16 @@ def search_by_category():
 
     result = [
         {
-            "id": row[3],
-            "title": row[9] or "",
-            "summary": (row[2] or "").split("|")[-1],
-            "region": row[4],
-            "district": row[5],
-            "date": row[6],
-            "type": row[7],  # text / image / video / numerical …
-            "specific_type": row[8],  # docx / pptx / hwpx / jpg …
-            "file_path": row[0],
+            "id":            row[3],
+            "title":         row[9] or "",
+            "summary":       (row[2] or "").split("|")[-1],
+            "region":        row[4],
+            "district":      row[5],
+            "date":          row[6],
+            "type":          row[7],          # text / image / video / numerical …
+            "specific_type": row[8],          # docx / pptx / hwpx / jpg …
+            "file_path":     row[0],
+            "table_name":    row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower() if row[7] == "numerical" else None,
         }
         for row in rows
     ]
@@ -658,7 +660,7 @@ def search():
     keywords = keyword_string.split()
     conditions, params = [], []
 
-    # ── WHERE 조건 ──
+    # 키워드 검색
     for kw in keywords:
         like = f"%{kw}%"
         conditions.append("(file_name ILIKE %s OR COALESCE(description,'') ILIKE %s)")
@@ -695,8 +697,8 @@ def search():
                uf.specific_file_type,
                uf.category,
                uf.file_name
-          FROM uploaded_file uf
-     LEFT JOIN village v ON v.village_id = uf.village_id
+        FROM uploaded_file uf
+        LEFT JOIN village v ON v.village_id = uf.village_id
            {where_sql}
            {order_sql};
     """
@@ -707,14 +709,14 @@ def search():
         cur.execute(query, params)
         rows = cur.fetchall()
 
-    # 연관 검색어 추출
-    all_desc = " ".join((row[2] or "") for row in rows)
-    related_word = [w for w, _ in top5_nouns(all_desc)]
+        # 연관 검색어 추출
+        all_desc = " ".join((row[2] or "") for row in rows)
+        related_word = [w for w, _ in top5_nouns(all_desc)]
 
-    for row in rows:
-        cate = row[9]
-        results[cate].append(
-            {
+        for row in rows:
+            cate = row[9]
+            table_name = row[0].rsplit('.', 1)[0].replace("-", "_").replace(" ", "_").lower()
+            results[cate].append({
                 "id": row[3],
                 "title": row[10] or "",
                 "summary": (row[2] or "").split("|")[-1],
@@ -724,9 +726,8 @@ def search():
                 "type": row[7],  # 대분류
                 "specific_type": row[8],  # 세부
                 "file_path": row[0],
-                "table_name": row[0] if row[7] == "numerical" else None,
-            }
-        )
+                "table_name": table_name if row[7] == "numerical" else None,
+            })
 
     return jsonify({"results": results, "related_word": related_word})
 
@@ -734,11 +735,17 @@ def search():
 @app.route("/preview_numerical", methods=["GET"])
 def preview_numerical():
     table_name = request.args.get("table_name")
+    if table_name.startswith("/virtual/numerical/"):
+        table_name = Path(table_name).name
+
     if not table_name:
         return {"error": "Missing table_name"}, 400
 
     query = f'SELECT * FROM "{table_name}" LIMIT 5'
-    df = pd.read_sql(query, engine)
+    try:
+        df = pd.read_sql(query, engine)
+    except Exception as e:
+        return jsonify({"error": f"Query Failed: {str(e)}", "query": query}), 500
 
     return jsonify(
         {"columns": list(df.columns), "preview": df.to_dict(orient="records")}
@@ -748,8 +755,11 @@ def preview_numerical():
 @app.route("/download_numerical_filtered", methods=["GET"])
 def download_numerical_filtered():
     table_name = request.args.get("table_name")
-    columns = request.args.get("columns")  # "col1,col2"
-    sort = request.args.get("sort")  # "col1:asc,col2:desc"
+    if table_name.startswith("/virtual/numerical/"):
+        table_name = Path(table_name).name
+    title = request.args.get("title")
+    columns = request.args.get("columns")
+    sort = request.args.get("sort")
 
     if not table_name:
         return {"error": "Missing table_name"}, 400
@@ -781,8 +791,8 @@ def download_numerical_filtered():
     except Exception as e:
         return {"error": str(e)}, 500
 
-    path = f"/tmp/{table_name}_filtered.csv"
-    df.to_csv(path, index=False)
+    path = f"/tmp/{table_name}_filtered"
+    df.to_csv(path, index=False, encoding="utf-8-sig")
 
     @after_this_request
     def cleanup(response):
@@ -792,7 +802,62 @@ def download_numerical_filtered():
             pass
         return response
 
-    return send_file(path, as_attachment=True, download_name=f"{table_name}.csv")
+    return send_file(path, as_attachment=True, download_name=f"{title}.csv")
+
+
+@app.route("/preview_url", methods=["GET"])
+def preview_url():
+    key = unquote(request.args.get("file_path", ""))
+    if not key:
+        return {"error": "file_path required"}, 400
+
+    CT_MAP = {
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "ppt": "application/vnd.ms-powerpoint",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "hwp": "application/x-hwp",
+        "hwpx": "application/x-hwp",
+    }
+
+    NUMERICAL_CT = {
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".csv": "text/csv",
+    }
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT file_type, specific_file_type "
+            "FROM uploaded_file WHERE file_path = %s",
+            (key,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return {"error": "File not found"}, 404
+
+    file_type, spec = row
+    ext = Path(key).suffix.lower()
+
+    if spec and spec != "numerical":
+        content_type = CT_MAP.get(spec, "application/octet-stream")
+    elif spec == "numerical":  # ← numerical 판별
+        content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
+    else:
+        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+    presigned = minio_client.presigned_get_object(
+        BUCKET_NAME,
+        key,
+        expires=timedelta(minutes=10),
+        response_headers={
+            "response-content-type": content_type,
+            "response-content-disposition": "inline",
+        },
+    )
+
+    return jsonify({"url": presigned, "file_type": file_type})
 
 
 @app.route("/preview_url", methods=["GET"])

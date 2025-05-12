@@ -173,6 +173,20 @@ with DAG(
         trigger_rule="none_failed",
     )
 
+    trigger_numerical_dag = TriggerDagRunOperator(
+        task_id="trigger_numerical_dag",
+        trigger_dag_id="numerical_processing_dag",
+        execution_date="{{ execution_date }}",
+        wait_for_completion=False,
+        reset_dag_run=True,
+        conf={
+            "meta_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='meta_path') }}",
+            "file_path": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_path') }}",
+            "file_type": "{{ ti.xcom_pull(task_ids='decide_file_type', key='file_type') }}",
+        },
+        trigger_rule="none_failed",
+    )
+
     def branch(**context):
         file_type = context["ti"].xcom_pull(
             task_ids="decide_file_type", key="file_type"
@@ -183,6 +197,8 @@ with DAG(
             return "trigger_image_dag"
         elif file_type == "text":
             return "trigger_text_dag"
+        elif file_type == "numerical":
+            return "trigger_numerical_dag"
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
 
@@ -195,5 +211,5 @@ with DAG(
     (
         decide_file_type
         >> branch_op
-        >> [trigger_video_dag, trigger_image_dag, trigger_text_dag]
+        >> [trigger_video_dag, trigger_image_dag, trigger_text_dag, trigger_numerical_dag]
     )

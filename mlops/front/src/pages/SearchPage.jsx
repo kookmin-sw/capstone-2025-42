@@ -10,6 +10,7 @@ const FILE_TYPE_MAP = {
   text:      '문서',
   video:     '영상',
   image:     '이미지',
+  numerical: '표(정형)',
 };
 const dataTypes   = ['전체', ...Object.values(FILE_TYPE_MAP)];
 const sortOptions = ['제목순', '최신순', '지역순'];
@@ -27,7 +28,7 @@ const fetchJSON = async (url, opts = {}) => {
   return r.json();
 };
 
-const isNumerical = (item) => item.specific_type === 'numerical';
+const isNumerical = (item) => item.type === 'numerical' || item.specific_type === 'numerical';
 
 export default function SearchPage() {
   const API = import.meta.env.VITE_API_BASE;
@@ -179,24 +180,28 @@ export default function SearchPage() {
   };
   const closeDetail = () => { setDetailItem(null); setPreviewKind(''); setPreviewSrc(''); };
 
-  /* ───────── 동작 핸들러 ───────── */
-  const handleDetail = item => {
+  /* ✅ 상세보기 */
+  const handleDetail = async (item) => {
     if (isNumerical(item)) {
-      setMergeTable({ table_name: item.title });
+      setMergeTable({ table_name: item.table_name }); // 머지 팝업 호출
     } else {
       openDetail(item);
     }
   };
 
+  /* ✅ 다운로드 */
   const handleDownload = async item => {
     try { await fetchJSON(`${API}/api/me`); }
     catch { alert('다운로드하려면 로그인하세요'); return nav('/login'); }
 
     if (isNumerical(item)) {
-      setSelectedNumerical(item.title);
+      console.log("📢 전달되는 테이블:", item);
+      setSelectedNumerical(item);
     } else {
       const url =
-        `${API}/download?file_path=${encodeURIComponent(item.file_path)}&title=${encodeURIComponent(item.title)}`;
+        `${API}/download?` +
+        `file_path=${encodeURIComponent(item.file_path)}` +
+        `&title=${encodeURIComponent(item.title)}`;
       window.open(url, '_blank');
     }
   };
@@ -344,10 +349,11 @@ export default function SearchPage() {
         document.body
       )}
 
-      {/* Numerical 전용 팝업들 */}
+      {/* Numerical 팝업 렌더링 */}
       {selectedNumerical && (
         <NumericalDownloads
-          tableName={selectedNumerical}
+          tableName={selectedNumerical.table_name}
+          title={selectedNumerical.title}
           onClose={() => setSelectedNumerical(null)}
         />
       )}
