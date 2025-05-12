@@ -57,4 +57,3 @@ mc admin bucket cors set $MINIO_ALIAS/$BUCKET_NAME /tmp/cors.json
 rm /tmp/cors.json
 
 echo "MinIO webhook registration complete!"
-

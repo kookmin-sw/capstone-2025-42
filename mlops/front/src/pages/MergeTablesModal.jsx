@@ -122,7 +122,7 @@ function MergeTablesModal({ baseTable, onClose }) {
                 const results = data.results || {};
                 const numericalResults = Object.entries(results).flatMap(([category, items]) =>
                   items
-                    .filter(item => item.specific_type  === 'numerical')
+                    .filter(item => item.specific_type === 'numerical')
                     .map(item => ({
                       table_name: item.title || 'Unknown Table'  // ✅ 확실하게 표시될 값 보장
                     }))

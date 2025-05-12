@@ -598,15 +598,16 @@ def get_categories():
     for name, count in rows:
         category_counter[name] = category_counter.get(name, 0) + count
 
-    result = [{"name": name, "count": count}
-              for name, count in sorted(category_counter.items(), key=lambda x: -x[1])]
+    result = [
+        {"name": name, "count": count}
+        for name, count in sorted(category_counter.items(), key=lambda x: -x[1])
+    ]
     return jsonify(result)
 
 
 @app.route("/search_by_category", methods=["GET"])
 def search_by_category():
     category = request.args.get("category")
-
     if not category:
         return jsonify({"error": "category parameter is required"}), 400
 
@@ -627,7 +628,6 @@ def search_by_category():
     WHERE uf.category = %s
     ORDER BY uf.uploaded_at DESC;
     """
-
     with conn.cursor() as cur:
         cur.execute(query, (category,))
         rows = cur.fetchall()
@@ -647,7 +647,6 @@ def search_by_category():
         }
         for row in rows
     ]
-
     return jsonify(result)
 
 
@@ -663,9 +662,9 @@ def search():
 
     # 키워드 검색
     for kw in keywords:
-        pattern = f"%{kw}%"
-        conditions.append("(file_name ILIKE %s OR COALESCE(description, '') ILIKE %s)")
-        params.extend([pattern, pattern])
+        like = f"%{kw}%"
+        conditions.append("(file_name ILIKE %s OR COALESCE(description,'') ILIKE %s)")
+        params.extend([like, like])
 
     if date_string == "today":
         conditions.append("DATE(uploaded_at) = %s")
@@ -680,10 +679,12 @@ def search():
         params.append(exp_string)
 
     where_sql = f" WHERE {' AND '.join(conditions)}" if conditions else ""
-    order_sql = "ORDER BY uploaded_at DESC" if order_string == "recent" \
+    order_sql = (
+        "ORDER BY uploaded_at DESC"
+        if order_string == "recent"
         else "ORDER BY file_name ASC"
+    )
 
-    # 최종 쿼리 조립
     query = f"""
         SELECT uf.file_path,
                uf.uuid,
@@ -856,6 +857,60 @@ def preview_url():
         },
     )
 
+    return jsonify({"url": presigned, "file_type": file_type})
+
+
+@app.route("/preview_url", methods=["GET"])
+def preview_url():
+    key = unquote(request.args.get("file_path", ""))
+    if not key:
+        return {"error": "file_path required"}, 400
+
+    CT_MAP = {
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "ppt": "application/vnd.ms-powerpoint",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "hwp": "application/x-hwp",
+        "hwpx": "application/x-hwp",
+    }
+
+    NUMERICAL_CT = {
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".csv": "text/csv",
+    }
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT file_type, specific_file_type "
+            "FROM uploaded_file WHERE file_path = %s",
+            (key,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return {"error": "File not found"}, 404
+
+    file_type, spec = row
+    ext = Path(key).suffix.lower()
+
+    if spec and spec != "numerical":
+        content_type = CT_MAP.get(spec, "application/octet-stream")
+    elif spec == "numerical":  # ← numerical 판별
+        content_type = NUMERICAL_CT.get(ext) or "application/octet-stream"
+    else:
+        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+    presigned = minio_client.presigned_get_object(
+        BUCKET_NAME,
+        key,
+        expires=timedelta(minutes=10),
+        response_headers={
+            "response-content-type": content_type,
+            "response-content-disposition": "inline",
+        },
+    )
     return jsonify({"url": presigned, "file_type": file_type})
 
 
