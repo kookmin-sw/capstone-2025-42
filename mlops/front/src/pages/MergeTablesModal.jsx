@@ -17,6 +17,8 @@ function MergeTablesModal({ baseTable, onClose }) {
 
   const [commonColumns, setCommonColumns] = useState([]);
 
+  const targetItem = searchResults.find(item => item.table_name === targetTable);
+
   useEffect(() => {
     if (!baseTable?.table_name) return;
     fetch(`${import.meta.env.VITE_API_BASE}/preview_numerical?table_name=${encodeURIComponent(baseTable.table_name)}`)
@@ -43,6 +45,12 @@ function MergeTablesModal({ baseTable, onClose }) {
       });
   }, [targetTable, baseColumns]);
 
+  useEffect(() => {
+    if (commonColumns.length === 0 && joinType === 'join') {
+      setJoinType('concat_h');
+    }
+  }, [commonColumns, joinType]);
+
   const handleSearch = () => {
     fetch(`${import.meta.env.VITE_API_BASE}/search?word=${encodeURIComponent(searchKeyword)}`)
       .then(r => r.json())
@@ -63,14 +71,16 @@ function MergeTablesModal({ baseTable, onClose }) {
   const handleDownload = () => {
     const baseCols = Array.from(baseSelected);
     const targetCols = Array.from(targetSelected);
-    const url =
-      `${import.meta.env.VITE_API_BASE}/download_merge` +
-      `?base=${encodeURIComponent(baseTable.table_name)}` +
-      `&target=${encodeURIComponent(targetTable)}` +
-      `&join_type=${joinType}` +
-      `&join_key=${encodeURIComponent(joinKey)}` +
-      `&base_cols=${encodeURIComponent(baseCols.join(','))}` +
-      `&target_cols=${encodeURIComponent(targetCols.join(','))}`;
+    const params = new URLSearchParams({
+      base: baseTable.table_name,
+      target: targetTable,
+      join_type: joinType,
+      join_key: joinKey,
+      base_cols: baseCols.join(','),
+      target_cols: targetCols.join(',')
+    });
+
+    const url = `${import.meta.env.VITE_API_BASE}/download_merge?${params.toString()}`;
     window.open(url, '_blank');
   };
 
@@ -106,7 +116,7 @@ function MergeTablesModal({ baseTable, onClose }) {
       >
         <h3>📌 테이블 병합 및 다운로드</h3>
         <p>
-          <b>기준 테이블:</b> {baseTable.table_name}
+          <b>기준 테이블:</b> {baseTable.title}
         </p>
 
         {basePreview.length > 0 && (
@@ -152,10 +162,23 @@ function MergeTablesModal({ baseTable, onClose }) {
           <input
             value={searchKeyword}
             onChange={e => setSearchKeyword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder="추가 테이블 검색"
             style={{ flex: 1 }}
           />
-          <button onClick={handleSearch}>검색</button>
+          <button
+            onClick={handleSearch}
+            style={{
+              backgroundColor: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              padding: '0.3rem 0.6rem',
+              cursor: 'pointer'
+            }}
+          >
+            검색
+          </button>
         </div>
 
         {searchResults.map(item => (
@@ -179,19 +202,19 @@ function MergeTablesModal({ baseTable, onClose }) {
         {targetTable && (
           <>
             <p>
-              <b>추가 테이블:</b> {targetTable}
+              <b>추가 테이블:</b> {targetItem?.label || targetTable}
             </p>
 
             <label>
               병합 방식:&nbsp;
               <select value={joinType} onChange={e => setJoinType(e.target.value)}>
-                <option value="join">조인</option>
+                {commonColumns.length > 0 && <option value="join">조인</option>}
                 <option value="concat_h">좌우 병합</option>
                 <option value="concat_v">상하 병합</option>
               </select>
             </label>
 
-            {joinType === 'join' && (
+            {joinType === 'join' && commonColumns.length > 0 && (
               <label>
                 &nbsp;&nbsp;조인 기준 컬럼:&nbsp;
                 <select value={joinKey} onChange={e => setJoinKey(e.target.value)}>
@@ -247,7 +270,18 @@ function MergeTablesModal({ baseTable, onClose }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
           <button onClick={onClose}>닫기</button>
-          <button onClick={handleDownload} style={{ backgroundColor: '#10b981', color: 'white' }}>
+          <button
+            onClick={handleDownload}
+            disabled={!targetTable}
+            style={{
+              backgroundColor: targetTable ? '#10b981' : '#ccc',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              padding: '0.5rem 1rem',
+              cursor: targetTable ? 'pointer' : 'not-allowed'
+            }}
+          >
             CSV 다운로드
           </button>
         </div>

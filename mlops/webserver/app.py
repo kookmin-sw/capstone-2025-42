@@ -821,6 +821,14 @@ def download_numerical_filtered():
     path = f"/tmp/{table_name}_filtered"
     df.to_csv(path, index=False, encoding="utf-8-sig")
 
+    safe_title = Path(title).stem
+    ext = Path(title).suffix.lower()
+
+    if ext not in [".csv", ".xls", ".xlsx"]:
+        ext = ".csv"
+
+    title = f"{safe_title}{ext}"
+
     @after_this_request
     def cleanup(response):
         try:
@@ -829,7 +837,7 @@ def download_numerical_filtered():
             pass
         return response
 
-    return send_file(path, as_attachment=True, download_name=f"{title}.csv")
+    return send_file(path, as_attachment=True, download_name=title)
 
 
 @app.route("/preview", methods=["GET"])
@@ -1001,7 +1009,13 @@ def download_merge():
         return {"error": f"병합 실패: {e}"}, 500
 
     # ─── CSV 저장 및 다운로드 ────────────────────────────────────
-    filename = f"{table1[:30]}_{table2[:30]}_merged.csv"
+    def clean_table_name(name):
+        return "_".join(name.split("_")[:-1]) if "_" in name else name
+
+    clean_table1 = clean_table_name(table1)
+    clean_table2 = clean_table_name(table2)
+
+    filename = f"{clean_table1}_{clean_table2}_merged.csv"
     csv_path = os.path.join("/tmp", filename)
     df_merged.to_csv(csv_path, index=False, encoding="utf-8-sig")  # BOM 포함
 

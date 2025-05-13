@@ -192,7 +192,7 @@ export default function SearchPage() {
       return;
     }
     if (isNumerical(item)) {
-      setMergeTable({ table_name: item.table_name }); // 머지 팝업 호출
+      setMergeTable(item); // 머지 팝업 호출
     } else {
       openDetail(item);
     }
