@@ -20,13 +20,69 @@ docker-compose down -v
 ├── airflow
 │   ├── Dockerfile
 │   ├── dags
-│   │   └── pre_processing_dag.py
+│   │   ├── api_weather_dag.py
+│   │   ├── image_processing_dag.py
+│   │   ├── numerical_processing_dag.py
+│   │   ├── postprocess_dag.py
+│   │   ├── process_router_dag.py
+│   │   ├── text_processing_dag.py
+│   │   ├── utils
+│   │   │   ├── __init__.py
+│   │   │   ├── airflow_utils.py
+│   │   │   ├── api_weather_module.py
+│   │   │   ├── api_weather_util.py
+│   │   │   ├── image_preprocessing.py
+│   │   │   ├── minio_utils.py
+│   │   │   ├── numerical_preprocessing.py
+│   │   │   ├── secrets.py
+│   │   │   ├── text_preprocessing.py
+│   │   │   └── video_preprocessing.py
+│   │   └── video_processing_dag.py
+│   ├── pom.xml
 │   ├── requirements.txt
 │   └── setup.sh
 ├── docker-compose.yml
+├── front
+│   ├── Dockerfile
+│   ├── README.md
+│   ├── dist
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── node_modules
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public
+│   │   └── vite.svg
+│   ├── src
+│   │   ├── App.css
+│   │   ├── App.jsx
+│   │   ├── assets
+│   │   │   ├── example.jpg
+│   │   │   ├── icon.png
+│   │   │   └── react.svg
+│   │   ├── components
+│   │   │   ├── Navbar.jsx
+│   │   │   └── RequireAuth.jsx
+│   │   ├── index.css
+│   │   ├── main.jsx
+│   │   └── pages
+│   │       ├── HomePage.jsx
+│   │       ├── LoginPage.jsx
+│   │       ├── MergeTablesModal.jsx
+│   │       ├── NumericalDownloads.jsx
+│   │       ├── SearchPage.jsx
+│   │       └── UploadPage.jsx
+│   ├── tailwind.config.js
+│   └── vite.config.js
 ├── init
 │   ├── Dockerfile
 │   └── init-minio.sh
+├── init-db
+│   ├── Dockerfile
+│   ├── init_db.py
+│   ├── requirements.txt
+│   └── wait-for-postgres.sh
 ├── proxy
 │   ├── Dockerfile
 │   └── app.py
@@ -34,17 +90,20 @@ docker-compose down -v
 │   ├── airflow_fernet_key
 │   ├── airflow_password
 │   ├── airflow_user
+│   ├── jwt_secret_key
+│   ├── kma_api_key
 │   ├── minio_root_password
 │   ├── minio_root_user
-│   ├── postgresql_password
-│   ├── postgresql_user
-│   ├── postgresql_host
 │   ├── postgresql_database
-│   ├── jwt_secret_key
-│   └── kma_api_key
+│   ├── postgresql_host
+│   ├── postgresql_password
+│   └── postgresql_user
 └── webserver
     ├── Dockerfile
-    └── app.py
+    ├── __pycache__
+    │   └── app.cpython-39.pyc
+    ├── app.py
+    └── dist
 ```
 
 ---
