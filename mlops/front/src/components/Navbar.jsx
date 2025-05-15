@@ -40,10 +40,10 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="flex justify-between items-center px-6 py-4 shadow-md bg-white">
+    <nav className="flex justify-between items-center px-6 py-1 shadow-md bg-white">
       {/* 로고 → 홈 */}
       <Link to="/" className="flex items-center gap-2">
-        <img src={icon} alt="로고 아이콘" className="w-8 h-8 object-contain" />
+        <img src={icon} alt="로고 아이콘" className="w-30 h-20 object-contain" />
         <span className="text-xl font-bold text-blue-800">Archive ON</span>
       </Link>
 
