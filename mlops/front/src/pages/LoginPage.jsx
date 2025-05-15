@@ -43,6 +43,14 @@ export default function LoginPage() {
   /* ② 로그인 */
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    /* 전체(ALL) 선택 방지 ------------------------- */
+    if (region === '시도(전체)' || district === '시군구(전체)') {
+      showMessage('전체 지역은 선택할 수 없습니다.\n구체적인 시·도와 군·구를 선택해 주세요.');
+      return;
+    }
+    /* -------------------------------------------- */
+
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/login`, {
         method: 'POST',
@@ -54,7 +62,9 @@ export default function LoginPage() {
 
       if (res.ok) {
         showMessage('로그인 성공! 메인 페이지로 이동합니다.');
-        navigate('/');
+	localStorage.setItem('userRegion',   region);
+	localStorage.setItem('userDistrict', district);
+	window.location.href = '/';
       } else {
         showMessage(data.message || '로그인 실패');
       }

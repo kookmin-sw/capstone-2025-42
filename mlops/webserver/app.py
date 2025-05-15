@@ -277,21 +277,6 @@ def top_keywords():
     return jsonify({"status": "success", "data": rows}), 200
 
 
-@app.route("/village_uploads", methods=["GET"])
-def village_uploads():
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(
-        """
-        SELECT v.region, v.district, COUNT(*) AS count
-        FROM   uploaded_file AS f
-        JOIN   village       AS v ON v.village_id = f.village_id
-        GROUP  BY v.region, v.district;
-        """
-    )
-    rows = cur.fetchall()
-    return jsonify({"status": "success", "data": rows}), 200
-
-
 @app.route("/api/random_story", methods=["GET"])
 def random_story():
     """
@@ -319,7 +304,17 @@ def random_story():
     title = os.path.splitext(row["file_name"])[0]
     desc = row["description"].split("|")[-1].strip()
 
-    return jsonify({"status": "success", "title": title, "description": desc}), 200
+    return (
+        jsonify(
+            {
+                "status": "success",
+                "title": title,
+                "description": desc,
+                "file_name": row["file_name"],
+            }
+        ),
+        200,
+    )
 
 
 @app.route("/api/regions", methods=["GET"])
@@ -333,7 +328,7 @@ def get_regions():
         data.setdefault(region, []).append(district)
 
     # 공통 ‘전체’ 옵션 추가
-    data = {"시도(전체)": ["시군구(전체)"], **data}
+    data = {**data}
     return jsonify(data), 200
 
 
@@ -408,6 +403,52 @@ def delete_account(user_id, username):
         samesite="Lax",
     )
     return response
+
+
+@app.route("/set_village", methods=["POST"])
+@token_required
+def set_village(user_id, username):
+    data = request.get_json(silent=True) or {}
+    region = data.get("region")
+    district = data.get("district")
+
+    if not region or not district:
+        return jsonify({"error": "region과 district가 모두 필요합니다."}), 400
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO village (region, district)
+                VALUES (%s, %s)
+                ON CONFLICT (region, district) DO UPDATE SET district = EXCLUDED.district
+                RETURNING village_id
+                """,
+                (region, district),
+            )
+            village_id = cur.fetchone()["village_id"]
+
+            cur.execute(
+                "UPDATE users SET current_village_id = %s WHERE user_id = %s",
+                (village_id, user_id),
+            )
+
+        conn.commit()
+        return (
+            jsonify(
+                {
+                    "message": "지역이 업데이트되었습니다.",
+                    "current_village_id": village_id,
+                    "region": region,
+                    "district": district,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/me")

@@ -28,7 +28,6 @@ export default function HomePage() {
 
   const [regionChart,  setRegionChart]  = useState(null);
   const [keywordChart, setKeywordChart] = useState(null);
-  const [villageRows,  setVillageRows]  = useState([]);
   const [metrics,      setMetrics]      = useState(null);
   const [story,        setStory]        = useState({ title: '스토리가 없습니다', description: '' });
 
@@ -56,10 +55,9 @@ export default function HomePage() {
       const global = await fetchWithAuth(`${import.meta.env.VITE_API_BASE}/region_file_count`);
       if (global.ok) setGlobalStats(global.data);
 
-      const [regions, keywords, villages] = await Promise.all([
+      const [regions, keywords] = await Promise.all([
         fetchWithAuth(`${import.meta.env.VITE_API_BASE}/region_uploads`),
         fetchWithAuth(`${import.meta.env.VITE_API_BASE}/top_keywords`),
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE}/village_uploads`),
       ]);
 
       if (regions.ok) {
@@ -87,8 +85,6 @@ export default function HomePage() {
           }],
         });
       }
-
-      if (villages.ok) setVillageRows(villages.data.data);
     })();
   }, []);
 
@@ -204,34 +200,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 지도용 테이블 */}
-          <div className="bg-gray-100 rounded-xl p-6 shadow mt-10">
-            <h3 className="text-lg font-semibold mb-4 text-gray-700 text-center">📍 데이터 지도</h3>
-            <div className="overflow-x-auto max-h-64">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-200 sticky top-0">
-                  <tr>
-                    <th className="px-2 py-1">시/도</th>
-                    <th className="px-2 py-1">시/군/구</th>
-                    <th className="px-2 py-1">업로드 수</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {villageRows.map((r) => (
-                    <tr key={`${r.region}-${r.district}`} className="odd:bg-white even:bg-gray-50">
-                      <td className="px-2 py-1 whitespace-nowrap">{r.region}</td>
-                      <td className="px-2 py-1 whitespace-nowrap">{r.district}</td>
-                      <td className="px-2 py-1 text-right">{fmt(r.count)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </section>
       )}
-
-      {modalCard && <InfoModal cardType={modalCard} onClose={() => setModalCard(null)} />}
     </div>
   );
 }
