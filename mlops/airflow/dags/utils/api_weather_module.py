@@ -54,8 +54,8 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
             {
                 "file_name": table_name,
                 "file_type": "numerical",
-                "specific_file_type": "numercial",
-                "file_path": f"/virtual/numerical/{table_name}",
+                "specific_file_type": "numerical",
+                "file_path": f"{table_name}",
                 "file_period": f"{year}-{month:02d}",
                 "uuid": str(uuid4()),
                 "uploaded_at": datetime.utcnow(),
@@ -69,6 +69,7 @@ def save_weather_metadata(engine, table_name, category, year, month, df):
                 ),
                 "category": category,
                 "status": "completed",
+                "village_id": 8,
             },
         )
 

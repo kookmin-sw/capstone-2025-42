@@ -1,6 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils.api_weather_module import (
     drop_weather_views,
     save_weather_to_postgres,
@@ -16,13 +16,15 @@ POSTGRESQL_PASSWORD = load_secret("postgresql_password")
 db_uri = f"postgresql+psycopg2://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@{POSTGRESQL_HOST}:5432/{POSTGRESQL_DATABASE}"
 
 default_args = {
-    "start_date": datetime(2024, 3, 1),
+    "start_date": datetime(2024, 5, 1),
+    "retries": 1,
+    "retry_delay": timedelta(minutes=10),
 }
 
 with DAG(
     dag_id="weather_to_psql",
     default_args=default_args,
-    schedule_interval=None,  # 수동 실행
+    schedule_interval="0 0 2 * *",  # 매월 2일 00:00에 실행
     catchup=False,
 ) as dag:
 
@@ -30,9 +32,12 @@ with DAG(
         drop_weather_views(db_uri)
 
     def weather_to_psql():
-        for year in range(2024, 2025):
-            for month in range(1, 3):
-                save_weather_to_postgres(year, month, db_uri)
+        today = datetime.today()
+        prev_month = today.replace(day=1) - timedelta(days=1)
+        year = prev_month.year
+        month = prev_month.month
+
+        save_weather_to_postgres(year, month, db_uri)
 
     def weather_to_sql():
         update_weather_views(db_uri)
