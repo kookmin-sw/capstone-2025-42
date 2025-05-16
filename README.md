@@ -1,4 +1,4 @@
-![Project Banner](https://github.com/user-attachments/assets/947814c8-2c21-4ed9-97c2-7c9a2d25a2c8)
+![Project Banner](https://github.com/user-attachments/assets/b57da865-9ea7-47ef-93d9-953b9126307f)
 
 ---
 
@@ -73,3 +73,6 @@ docker-compose up -d --build
 > jwt_secret_key = secrets.token_urlsafe(64)
 > print(jwt_secret_key)
 > ```
+
+### 7. 포스터
+![image](https://github.com/user-attachments/assets/9543d326-ea96-412a-b644-f66073a0316c)
